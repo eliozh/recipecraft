@@ -44,6 +44,11 @@ android {
     buildFeatures {
         compose = true
     }
+
+    sourceSets {
+        // The Compose tests render the same synthetic LLM replies the JVM tests parse.
+        getByName("androidTest").resources.directories.add("src/test/resources")
+    }
 }
 
 /**
@@ -86,11 +91,12 @@ kover {
                 packages("com.elio.recipecraft.domain", "com.elio.recipecraft.data")
             }
             excludes {
-                // Thin wrappers over the Android Keystore and LocaleManager that a JVM test cannot reach;
+                // Thin wrappers over the Android Keystore, LocaleManager and AssetManager that a JVM test cannot reach;
                 // TinkSecretStoreInstrumentedTest and the manual checks cover them.
                 classes(
                     "com.elio.recipecraft.data.settings.KeystoreAeadProvider*",
                     "com.elio.recipecraft.data.settings.LocaleManagerAppLanguageSettings*",
+                    "com.elio.recipecraft.data.llm.AndroidAssetReader*",
                 )
             }
         }

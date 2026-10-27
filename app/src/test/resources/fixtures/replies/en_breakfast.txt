@@ -1,0 +1,27 @@
+Here is a warm, filling breakfast that takes about ten minutes.
+```json
+{
+  "recipes": [
+    {
+      "name": "Banana oatmeal with milk",
+      "mealType": "breakfast",
+      "servings": 2,
+      "aiKcal": 560,
+      "ingredients": [
+        { "name": "Rolled oats", "nameEn": "rolled oats", "quantity": "1", "unit": "cup", "grams": 80, "aiKcal": 303 },
+        { "name": "Whole milk", "nameEn": "whole milk", "quantity": "1 1/2", "unit": "cups", "grams": 366, "aiKcal": 223 },
+        { "name": "Banana", "nameEn": "banana", "quantity": "1", "unit": "", "grams": 118, "aiKcal": 105 },
+        { "name": "Honey", "nameEn": "honey", "quantity": "1", "unit": "tsp", "grams": 7, "aiKcal": 21 },
+        { "name": "Ground cinnamon", "nameEn": "cinnamon", "quantity": "", "unit": "a pinch", "grams": null, "aiKcal": 0 }
+      ],
+      "tools": ["Small saucepan", "Wooden spoon", "Knife", "Cutting board"],
+      "steps": [
+        { "text": "Bring the milk to a gentle simmer in the saucepan.", "minutes": 3 },
+        { "text": "Stir in the oats and cook, stirring often, until creamy.", "minutes": 5 },
+        { "text": "Slice the banana.", "minutes": null },
+        { "text": "Spoon the oatmeal into bowls and top with banana, honey and cinnamon.", "minutes": null }
+      ]
+    }
+  ]
+}
+```

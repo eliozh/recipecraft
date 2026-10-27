@@ -1,0 +1,28 @@
+给你一份十分钟就能做好的中式早餐。
+```json
+{
+  "recipes": [
+    {
+      "name": "葱花鸡蛋饼",
+      "mealType": "breakfast",
+      "servings": 2,
+      "aiKcal": 640,
+      "ingredients": [
+        { "name": "中筋面粉", "nameEn": "all-purpose flour", "quantity": "100", "unit": "克", "grams": 100, "aiKcal": 364 },
+        { "name": "鸡蛋", "nameEn": "egg", "quantity": "2", "unit": "个", "grams": 100, "aiKcal": 143 },
+        { "name": "清水", "nameEn": "water", "quantity": "150", "unit": "毫升", "grams": 150, "aiKcal": 0 },
+        { "name": "小葱", "nameEn": "scallion", "quantity": "2", "unit": "根", "grams": 20, "aiKcal": 6 },
+        { "name": "植物油", "nameEn": "vegetable oil", "quantity": "1", "unit": "汤匙", "grams": 14, "aiKcal": 124 },
+        { "name": "盐", "nameEn": "salt", "quantity": "", "unit": "适量", "grams": null, "aiKcal": 0 }
+      ],
+      "tools": ["大碗", "打蛋器", "平底锅", "锅铲"],
+      "steps": [
+        { "text": "小葱切成葱花。", "minutes": 1 },
+        { "text": "面粉、鸡蛋、清水和盐放入大碗，搅成无颗粒的面糊，拌入葱花。", "minutes": 3 },
+        { "text": "平底锅刷油，中小火倒入一勺面糊摊平，两面各煎至金黄。", "minutes": 6 },
+        { "text": "切块装盘，趁热食用。", "minutes": null }
+      ]
+    }
+  ]
+}
+```

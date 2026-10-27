@@ -1,0 +1,70 @@
+package com.elio.recipecraft.data.llm
+
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonTransformingSerializer
+
+/*
+ * The `RecipeBatch` JSON the model returns, as the prompts in assets/prompts/{en,zh}/system.md
+ * describe it. Changing it needs the prompts updated in both languages (SPEC: "Ask first").
+ *
+ * {
+ *   "recipes": [{
+ *     "name": "Spinach omelette",
+ *     "mealType": "breakfast" | "lunch" | "dinner" | "snack" | "dessert",
+ *     "servings": 2,
+ *     "aiKcal": 420,                                  // whole recipe, all servings
+ *     "ingredients": [{
+ *       "name": "Eggs",                               // display name, app language
+ *       "nameEn": "egg",                              // hidden match key, English
+ *       "quantity": "4", "unit": "",
+ *       "grams": 200,                                 // null when a weight makes no sense
+ *       "aiKcal": 286
+ *     }],
+ *     "tools": ["Non-stick pan"],
+ *     "steps": [{ "text": "Whisk the eggs.", "minutes": 2 }]
+ *   }]
+ * }
+ *
+ * The app adds id, timestamps, language, setId and the calorie source. Every field has a default
+ * so a missing optional one never fails the whole reply; RecipeParser checks the required ones.
+ */
+
+@Serializable
+data class RecipeBatchWire(val recipes: List<RecipeWire> = emptyList())
+
+@Serializable
+data class RecipeWire(
+    val name: String = "",
+    val mealType: String? = null,
+    val servings: Double? = null,
+    /** The model's estimate for the whole recipe. */
+    val aiKcal: Double? = null,
+    val ingredients: List<IngredientWire> = emptyList(),
+    val tools: List<String> = emptyList(),
+    val steps: List<@Serializable(with = TolerantStepSerializer::class) StepWire> = emptyList(),
+)
+
+@Serializable
+data class IngredientWire(
+    val name: String = "",
+    val nameEn: String = "",
+    val quantity: String = "",
+    val unit: String = "",
+    val grams: Double? = null,
+    val aiKcal: Double? = null,
+)
+
+@Serializable
+data class StepWire(
+    val text: String = "",
+    val minutes: Double? = null,
+)
+
+/** Models sometimes write steps as plain strings; read those as steps without a time. */
+internal object TolerantStepSerializer : JsonTransformingSerializer<StepWire>(StepWire.serializer()) {
+    override fun transformDeserialize(element: JsonElement): JsonElement =
+        if (element is JsonPrimitive && element.isString) JsonObject(mapOf("text" to element)) else element
+}

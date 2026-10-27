@@ -58,4 +58,34 @@
     <string name="settings_models_empty">服务商没有返回任何模型。</string>
     <string name="settings_pick_model">选择模型</string>
     <string name="action_cancel">取消</string>
+    <string name="chat_building_recipes">正在生成食谱…</string>
+    <string name="chat_repairing_recipes">正在修正食谱格式…</string>
+    <string name="chat_recipe_failed">无法从这条回复中读取食谱。</string>
+    <string name="action_retry">重试</string>
+    <string name="recipe_ingredients">食材</string>
+    <string name="recipe_tools">厨具</string>
+    <string name="recipe_steps">步骤</string>
+    <string name="recipe_calories_ai_estimate">≈ AI 估算</string>
+    <plurals name="recipe_calories_total">
+        <item quantity="other">共 %1$d 千卡</item>
+    </plurals>
+    <plurals name="recipe_calories_per_serving">
+        <item quantity="other">每份 %1$d 千卡</item>
+    </plurals>
+    <string name="recipe_calories_unknown">未估算</string>
+    <plurals name="recipe_servings">
+        <item quantity="other">%1$d 人份</item>
+    </plurals>
+    <!-- 名称、用量、单位 -->
+    <string name="recipe_ingredient_line">%3$s %1$s%2$s</string>
+    <!-- 名称、单位，用于没有用量的食材：“盐 适量” -->
+    <string name="recipe_ingredient_unquantified">%1$s %2$s</string>
+    <string name="recipe_step_minutes">%1$d 分钟</string>
+    <string name="recipe_section_expand">展开%1$s</string>
+    <string name="recipe_section_collapse">收起%1$s</string>
+    <string name="meal_breakfast">早餐</string>
+    <string name="meal_lunch">午餐</string>
+    <string name="meal_dinner">晚餐</string>
+    <string name="meal_snack">加餐</string>
+    <string name="meal_dessert">甜点</string>
 </resources>

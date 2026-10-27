@@ -1,0 +1,20 @@
+Here is a quick breakfast for you.
+```json
+{
+  "recipes": [
+    {
+      "name": "Peanut butter toast",
+      "mealType": "breakfast",
+      "servings": 1,
+      "ingredients": [
+        { "name": "Whole wheat bread", "nameEn": "whole wheat bread", "quantity": "2", "unit": "slices", "grams": 64, "aiKcal": 160 }
+        { "name": "Peanut butter", "nameEn": "peanut butter", "quantity": "2", "unit": "tbsp", "grams": 32, "aiKcal": 188 }
+      ],
+      "tools": ["Toaster", "Butter knife"],
+      "steps": [
+        { "text": "Toast the bread.", "minutes": 2 },
+        { "text": "Spread with peanut butter.", "minutes": null }
+      ]
+    }
+  ]
+```

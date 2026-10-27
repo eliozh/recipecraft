@@ -56,7 +56,8 @@ class InMemoryDataStore : DataStore<Preferences> {
 class FakeLanguageSettings : AppLanguageSettings {
     var current = AppLanguage.FOLLOW_SYSTEM
     override val choice get() = current
-    override val resolvedLanguage = Language.EN
+    var resolved = Language.EN
+    override val resolvedLanguage get() = resolved
     override fun setChoice(choice: AppLanguage) {
         current = choice
     }

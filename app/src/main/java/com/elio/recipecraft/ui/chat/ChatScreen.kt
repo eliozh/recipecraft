@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,6 +19,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -41,6 +43,7 @@ import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.ui.common.isFixedInSettings
 import com.elio.recipecraft.ui.common.llmErrorText
+import com.elio.recipecraft.ui.recipe.RecipeCard
 
 @Composable
 fun ChatScreen(
@@ -50,8 +53,8 @@ fun ChatScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    val lastText = state.messages.lastOrNull()?.text
-    LaunchedEffect(state.messages.size, lastText?.length, state.error) {
+    val last = state.messages.lastOrNull()
+    LaunchedEffect(state.messages.size, last?.shownText?.length, last?.recipeStatus, last?.recipes?.size, state.error) {
         val count = listState.layoutInfo.totalItemsCount
         if (count > 0) listState.scrollToItem(count - 1)
     }
@@ -73,7 +76,12 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxSize().testTag(ChatTestTags.MESSAGES),
             ) {
                 items(state.messages, key = { it.id }) { message ->
-                    MessageBubble(message, streaming = message.id == state.streamingMessageId)
+                    ChatItem(
+                        message = message,
+                        streaming = message.id == state.streamingMessageId,
+                        canRetry = !state.sending,
+                        onRetry = { viewModel.onRetry(message.id) },
+                    )
                 }
                 state.error?.let { error ->
                     item(key = "error") { ErrorCard(error, onOpenSettings) }
@@ -93,6 +101,53 @@ fun ChatScreen(
 }
 
 @Composable
+private fun ChatItem(message: ChatMessage, streaming: Boolean, canRetry: Boolean, onRetry: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Above the raw text, so Retry stays in view when the list scrolls to this reply.
+        if (message.recipeStatus == RecipeStatus.FAILED) RecipeFailed(canRetry, onRetry)
+        // A recipe reply whose prose is empty shows only its cards.
+        if (message.shownText.isNotEmpty() || (streaming && message.recipeStatus == RecipeStatus.NONE)) {
+            MessageBubble(message, streaming)
+        }
+        when (message.recipeStatus) {
+            RecipeStatus.BUILDING -> Progress(stringResource(R.string.chat_building_recipes))
+            RecipeStatus.REPAIRING -> Progress(stringResource(R.string.chat_repairing_recipes))
+            RecipeStatus.FAILED, RecipeStatus.NONE -> Unit
+        }
+        message.recipes.forEach { RecipeCard(it) }
+    }
+}
+
+@Composable
+private fun Progress(text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.padding(horizontal = 16.dp).testTag(ChatTestTags.RECIPE_PROGRESS),
+    ) {
+        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun RecipeFailed(canRetry: Boolean, onRetry: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().testTag(ChatTestTags.RECIPE_FAILED),
+    ) {
+        Text(
+            stringResource(R.string.chat_recipe_failed),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.weight(1f),
+        )
+        OutlinedButton(onClick = onRetry, enabled = canRetry) { Text(stringResource(R.string.action_retry)) }
+    }
+}
+
+@Composable
 private fun MessageBubble(message: ChatMessage, streaming: Boolean) {
     val isUser = message.role == LlmMessage.Role.USER
     Box(Modifier.fillMaxWidth()) {
@@ -105,7 +160,7 @@ private fun MessageBubble(message: ChatMessage, streaming: Boolean) {
                 .testTag(if (isUser) ChatTestTags.USER_MESSAGE else ChatTestTags.ASSISTANT_MESSAGE),
         ) {
             Text(
-                text = message.text.ifEmpty { if (streaming) "…" else "" },
+                text = message.shownText.ifEmpty { if (streaming) "…" else "" },
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
@@ -170,5 +225,7 @@ object ChatTestTags {
     const val USER_MESSAGE = "chat_user_message"
     const val ASSISTANT_MESSAGE = "chat_assistant_message"
     const val ERROR = "chat_error"
+    const val RECIPE_PROGRESS = "chat_recipe_progress"
+    const val RECIPE_FAILED = "chat_recipe_failed"
     const val INPUT = "chat_input"
 }

@@ -58,4 +58,37 @@
     <string name="settings_models_empty">The provider returned no models.</string>
     <string name="settings_pick_model">Pick a model</string>
     <string name="action_cancel">Cancel</string>
+    <string name="chat_building_recipes">Building recipes…</string>
+    <string name="chat_repairing_recipes">Fixing the recipe format…</string>
+    <string name="chat_recipe_failed">Couldn\'t read a recipe from this reply.</string>
+    <string name="action_retry">Retry</string>
+    <string name="recipe_ingredients">Ingredients</string>
+    <string name="recipe_tools">Tools</string>
+    <string name="recipe_steps">Steps</string>
+    <string name="recipe_calories_ai_estimate">≈ AI estimate</string>
+    <plurals name="recipe_calories_total">
+        <item quantity="one">%1$d kcal total</item>
+        <item quantity="other">%1$d kcal total</item>
+    </plurals>
+    <plurals name="recipe_calories_per_serving">
+        <item quantity="one">%1$d kcal per serving</item>
+        <item quantity="other">%1$d kcal per serving</item>
+    </plurals>
+    <string name="recipe_calories_unknown">Not estimated</string>
+    <plurals name="recipe_servings">
+        <item quantity="one">%1$d serving</item>
+        <item quantity="other">%1$d servings</item>
+    </plurals>
+    <!-- quantity, unit, name -->
+    <string name="recipe_ingredient_line">%1$s %2$s %3$s</string>
+    <!-- name, unit, for an ingredient without a quantity: "Salt, to taste" -->
+    <string name="recipe_ingredient_unquantified">%1$s, %2$s</string>
+    <string name="recipe_step_minutes">%1$d min</string>
+    <string name="recipe_section_expand">Show %1$s</string>
+    <string name="recipe_section_collapse">Hide %1$s</string>
+    <string name="meal_breakfast">Breakfast</string>
+    <string name="meal_lunch">Lunch</string>
+    <string name="meal_dinner">Dinner</string>
+    <string name="meal_snack">Snack</string>
+    <string name="meal_dessert">Dessert</string>
 </resources>
