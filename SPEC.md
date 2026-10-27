@@ -88,7 +88,7 @@ app/src/main/java/com/elio/recipecraft/
   data/settings/   → SettingsRepository (DataStore), SecretStore (Tink), ProviderDefaults
   ui/              → AppNav, AdaptiveScaffold, theme/, common/
   ui/{chat,library,recipe,settings,cover}/ → screens with their ViewModels
-app/src/main/assets/prompts/{en,zh}/ → system.md, generate.md, modify.md, repair.md, translate.md
+app/src/main/assets/prompts/{en,zh}/ → system.md, chat.md, generate.md, modify.md, repair.md, translate.md
 app/src/main/assets/nutrition/       → bundled USDA DB, NOTICE (sources and licenses)
 app/src/main/res/values{,-zh}/       → strings (English default, Chinese)
 app/src/test/                        → JVM unit tests, mirroring the main package
