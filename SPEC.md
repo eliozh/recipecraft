@@ -43,7 +43,7 @@ Every calorie figure shows its source:
   鸡蛋,鸡子|蛋,144
   ```
   `name` and `kcal_per_100g` are required, and `aliases` is an optional `|`-separated list. Rows that fail validation are skipped and counted in the import summary.
-- **Matching order:** imported tables first, then USDA. Any ingredient that matches no table makes the recipe fall back to "≈ AI estimate", which is the normal result for Chinese recipes when no table has been imported.
+- **Matching order:** imported tables first, then USDA. Any ingredient that matches no table makes the recipe fall back to "≈ AI estimate", Every recipe, Chinese ones included, is also matched against USDA on its hidden English key `nameEn`, so common Chinese dishes often get a database total even without an imported table. An imported table covers ingredients USDA lacks or that the user wants to override.
 
 ## Tech Stack
 
@@ -172,7 +172,7 @@ sealed interface LlmEvent {
 
 1. With a real key for each of Claude, OpenAI and DeepSeek, "Full-day set × 2" produces 2 × {breakfast, lunch, dinner}, streamed and rendered as grouped cards, in both English and Chinese.
 2. Every recipe card shows ingredients, tools, numbered steps, servings and calories, with a visible calorie source (database or AI estimate).
-3. For a recipe made of common whole foods (such as "oatmeal with banana and milk"), every ingredient matches the database and the total is within ±10% of a hand calculation from the same data. With a CSV table imported that contains its ingredients, a Chinese recipe (such as 番茄炒蛋) matches every ingredient. Without one, it shows "≈ AI estimate".
+3. For a recipe made of common whole foods (such as "oatmeal with banana and milk"), every ingredient matches the database and the total is within ±10% of a hand calculation from the same data. With a CSV table imported that contains its ingredients, a Chinese recipe (such as 番茄炒蛋) matches every ingredient through that table, ahead of USDA. A Chinese recipe with an ingredient that neither an imported table nor USDA matches shows "≈ AI estimate".
 4. Every recipe keeps its generation language. Switching the language offers to translate. A translated recipe keeps its id, set, grams and calories, and only its text changes.
 5. Modifying one recipe in a set changes only that recipe. Modifying a saved recipe offers Replace or Save as copy, and both behave as described.
 6. Saved recipes survive restarts. Export → delete all → import restores identical records.

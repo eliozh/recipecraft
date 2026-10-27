@@ -155,7 +155,7 @@ T8 creates `AppDatabase` and T10 adds `recipes` to it, so T8 → T10 is sequenti
 **Task 8: Import your own nutrition tables** *(M)*
 - Create `AppDatabase` (schema version 1, exported to `app/schemas/`) with the `nutrition_tables(id, name, priority, importedAt)` and `nutrition_foods(tableId, name, aliases, kcalPer100g)` entities and `NutritionTableDao`. T10 adds the `recipes` table to this same database. Add `CsvTableImporter` (UTF-8, header `name,aliases,kcal_per_100g`; invalid rows are skipped and counted). Feed imported tables to `CalorieCalculator` in priority order ahead of USDA, matching `zh` recipes on `name` and `en` recipes on `nameEn`.
 - Add Settings > Nutrition tables: import CSV through SAF `OpenDocument`, list, reorder priority, delete.
-- AC: importing a small Chinese CSV that contains 番茄 and 鸡蛋 makes 番茄炒蛋 show a database total, and deleting that table turns it back into "≈ AI estimate". A CSV with bad rows imports the good rows and reports how many were skipped.
+- AC: importing a small Chinese CSV that contains 番茄 and 鸡蛋 makes 番茄炒蛋 show a database total, and deleting that table turns it back into "≈ AI estimate" when only imported tables are consulted (in the app, USDA's `nameEn` match may still give a database total). A CSV with bad rows imports the good rows and reports how many were skipped.
 - Verify: unit tests for `CsvTableImporter` (good file, bad rows, BOM, wrong header) and for the zh/en lookup key choice. A Room test for the table priority order. A manual import through the SAF picker.
 - Files: `data/AppDatabase.kt`, `data/nutrition/{NutritionEntities,NutritionTableDao,CsvTableImporter}.kt`, `CalorieCalculator.kt`, `ui/settings/NutritionTables.kt`, `res/values*/strings.xml`.
 
@@ -203,7 +203,7 @@ T8 creates `AppDatabase` and T10 adds `recipes` to it, so T8 → T10 is sequenti
 
 ### Checkpoint B (after T8–T15)
 - [ ] All tests pass and the build is clean, with Kover ≥ 80%
-- [ ] An imported CSV gives 番茄炒蛋 a database total, and deleting it falls back to "≈ AI estimate"
+- [ ] An imported CSV gives 番茄炒蛋 a database total through that table, and a zh recipe with an ingredient no table matches shows "≈ AI estimate"
 - [ ] End to end: generate a set → modify one meal → save → open detail → modify again → replace → switch language → translate
 - [ ] Human review
 
