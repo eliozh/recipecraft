@@ -145,6 +145,18 @@ class FakeRecipeDao : RecipeDao() {
         return state.value
     }
 
+    override suspend fun notIn(language: Language): List<RecipeEntity> =
+        all().withIndex()
+            .sortedWith(compareByDescending<IndexedValue<RecipeEntity>> { it.value.createdAt }.thenBy { it.index })
+            .map { it.value }
+            .filter { it.language != language }
+
+    override suspend fun update(recipe: RecipeEntity): Int {
+        if (state.value.none { it.id == recipe.id }) return 0
+        write { all -> all.map { if (it.id == recipe.id) recipe else it } }
+        return 1
+    }
+
     override suspend fun upsert(recipes: List<RecipeEntity>) = write { all ->
         recipes.fold(all) { acc, recipe ->
             if (acc.any { it.id == recipe.id }) acc.map { if (it.id == recipe.id) recipe else it } else acc + recipe

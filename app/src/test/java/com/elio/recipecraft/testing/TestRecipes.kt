@@ -11,6 +11,10 @@ import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.domain.Step
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 fun ingredient(name: String, nameEn: String = name, grams: Double? = 100.0) =
     Ingredient(name = name, nameEn = nameEn, quantity = "1", unit = "", grams = grams, aiKcal = 100)
@@ -46,3 +50,39 @@ fun testRecipe(
 /** A table that knows [foods] (name to kcal per 100 g), matched on `nameEn`. */
 fun lookupOf(vararg foods: Pair<String, Double>): NutritionLookup =
     TableLookup(IngredientMatcher(foods.map { (name, kcal) -> NutritionFood(name, emptyList(), kcal) }))
+
+/**
+ * A faithful model reply that translates [recipe]: every text field prefixed with [prefix], every
+ * number and match key as it was.
+ */
+fun translatedReply(recipe: Recipe, prefix: String = "译 "): String = buildJsonObject {
+    put("name", prefix + recipe.name)
+    put("servings", recipe.servings)
+    put(
+        "ingredients",
+        JsonArray(
+            recipe.ingredients.map {
+                buildJsonObject {
+                    put("name", prefix + it.name)
+                    put("nameEn", it.nameEn)
+                    put("quantity", it.quantity)
+                    put("unit", prefix + it.unit)
+                    put("grams", it.grams)
+                    put("aiKcal", it.aiKcal)
+                }
+            },
+        ),
+    )
+    put("tools", JsonArray(recipe.tools.map { JsonPrimitive(prefix + it) }))
+    put(
+        "steps",
+        JsonArray(
+            recipe.steps.map {
+                buildJsonObject {
+                    put("text", prefix + it.text)
+                    put("minutes", it.minutes)
+                }
+            },
+        ),
+    )
+}.toString()

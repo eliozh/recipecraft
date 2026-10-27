@@ -61,6 +61,15 @@ class PromptBuilder @Inject constructor(
         return Prompt(LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, user)), system(language)), language)
     }
 
+    /**
+     * Asks the model to translate one recipe, given as [recipeJson], into [target], through
+     * `translate.md` in [target]'s folder. The template is self-contained, so no system prompt.
+     */
+    suspend fun translate(recipeJson: String, target: Language): Prompt {
+        val user = template(target, "translate", mapOf("recipe" to recipeJson))
+        return Prompt(LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, user))), target)
+    }
+
     private suspend fun system(language: Language) = template(language, "system", emptyMap())
 
     private suspend fun template(language: Language, name: String, values: Map<String, String>): String {

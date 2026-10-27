@@ -1,0 +1,21 @@
+Here is the translated recipe.
+```json
+{
+  "name": "Stir-fried tomato and egg",
+  "mealType": "lunch",
+  "servings": 2,
+  "aiKcal": 420,
+  "ingredients": [
+    { "name": "Tomatoes", "nameEn": "tomato", "quantity": "2", "unit": "", "grams": 300, "aiKcal": 54 },
+    { "name": "Eggs", "nameEn": "egg", "quantity": "3", "unit": "", "grams": 150, "aiKcal": 215 },
+    { "name": "Cooking oil", "nameEn": "vegetable oil", "quantity": "1", "unit": "tbsp", "grams": 15, "aiKcal": 133 },
+    { "name": "Salt", "nameEn": "salt", "quantity": "2", "unit": "g", "grams": 2, "aiKcal": 0 }
+  ],
+  "tools": ["Wok", "Spatula", "Bowl"],
+  "steps": [
+    { "text": "Cut the tomatoes into wedges and beat the eggs.", "minutes": 3 },
+    { "text": "Heat oil in the wok, scramble the eggs until just set, then set them aside.", "minutes": 2 },
+    { "text": "Fry the tomatoes in the remaining oil until juicy, return the eggs, add the salt and toss.", "minutes": 5 }
+  ]
+}
+```

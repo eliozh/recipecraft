@@ -3,7 +3,11 @@ package com.elio.recipecraft.ui.recipe
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elio.recipecraft.data.llm.TranslationError
 import com.elio.recipecraft.data.recipe.RecipeRepository
+import com.elio.recipecraft.data.recipe.RecipeTranslations
+import com.elio.recipecraft.data.settings.AppLanguageSettings
+import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -29,7 +33,14 @@ data class RecipeDetailUiState(
     val loadFailed: Boolean = false,
     val deleting: Boolean = false,
     val deleteFailed: Boolean = false,
-)
+    /** The language the app shows now; a recipe in another one offers Translate. */
+    val appLanguage: Language = Language.EN,
+    val translating: Boolean = false,
+    /** Why the last Translate failed, until the screen has shown it. */
+    val translateError: TranslationError? = null,
+) {
+    val canTranslate: Boolean get() = recipe != null && recipe.language != appLanguage && !translating && !deleting
+}
 
 sealed interface RecipeDetailEvent {
     /** The recipe is gone and can be restored through [UndoDelete]; leave the screen. */
@@ -41,11 +52,13 @@ class RecipeDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: RecipeRepository,
     private val undoDelete: UndoDelete,
+    private val languageSettings: AppLanguageSettings,
+    private val translations: RecipeTranslations,
 ) : ViewModel() {
 
     private val recipeId: String? = savedStateHandle[ARG_RECIPE_ID]
 
-    private val _uiState = MutableStateFlow(RecipeDetailUiState())
+    private val _uiState = MutableStateFlow(RecipeDetailUiState(appLanguage = languageSettings.resolvedLanguage))
     val uiState: StateFlow<RecipeDetailUiState> = _uiState.asStateFlow()
 
     private val _events = Channel<RecipeDetailEvent>(Channel.BUFFERED)
@@ -76,6 +89,27 @@ class RecipeDetailViewModel @Inject constructor(
             undoDelete.offer(recipe)
             _events.send(RecipeDetailEvent.Deleted)
         }
+    }
+
+    /** The language can change in system Settings while the screen is open. */
+    fun onResume() {
+        _uiState.update { it.copy(appLanguage = languageSettings.resolvedLanguage) }
+    }
+
+    /** Translates this recipe into the app language; the saved recipe updates in place. */
+    fun translate() {
+        val state = _uiState.value
+        val recipe = state.recipe ?: return
+        if (!state.canTranslate) return
+        _uiState.update { it.copy(translating = true, translateError = null) }
+        viewModelScope.launch {
+            val error = translations.translate(recipe, state.appLanguage)
+            _uiState.update { it.copy(translating = false, translateError = error) }
+        }
+    }
+
+    fun onTranslateErrorShown() {
+        _uiState.update { it.copy(translateError = null) }
     }
 
     fun onDeleteFailedShown() {

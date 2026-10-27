@@ -195,4 +195,29 @@
     <plurals name="recipe_ingredient_kcal_ai">
         <item quantity="other">≈ %1$d 千卡（AI）</item>
     </plurals>
+    <string name="action_translate">翻译</string>
+    <string name="action_not_now">以后再说</string>
+    <string name="action_ok">好</string>
+    <string name="translate_offer_title">翻译已保存的食谱？</string>
+    <!-- %1$d 数量；%2$s 和 %3$s 是语言名称，如 "English" 和 "中文" -->
+    <plurals name="translate_offer_message">
+        <item quantity="other">有 %1$d 个已保存的食谱是 %2$s 版本。要用 AI 把它们翻译成 %3$s 吗？</item>
+    </plurals>
+    <string name="translate_progress_title">正在翻译食谱</string>
+    <!-- “正在翻译第 2 个，共 5 个…” -->
+    <string name="translate_progress">正在翻译第 %1$d 个，共 %2$d 个…</string>
+    <string name="translate_starting">正在准备…</string>
+    <string name="translate_done_title">翻译完成</string>
+    <string name="translate_cancelled_title">已取消翻译</string>
+    <plurals name="translate_done_translated">
+        <item quantity="other">已翻译 %d 个食谱。</item>
+    </plurals>
+    <plurals name="translate_done_failed">
+        <item quantity="other">%d 个食谱未能翻译，已保持原样。</item>
+    </plurals>
+    <string name="translate_cancelled_rest">其余食谱保持原样。</string>
+    <string name="translate_none">没有需要翻译的食谱。</string>
+    <string name="translate_error_rejected">AI 的译文改动了文字以外的内容，因此未被采用。</string>
+    <string name="translate_error_storage">无法读取或保存你的食谱。</string>
+    <string name="recipe_translating">正在翻译…</string>
 </resources>

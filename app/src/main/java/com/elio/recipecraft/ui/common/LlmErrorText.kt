@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.TranslationError
 
 /** The localized message for [kind]. */
 @Composable
@@ -19,6 +20,14 @@ fun llmErrorText(kind: LlmErrorKind): String = when (kind) {
     LlmErrorKind.InvalidEndpoint -> stringResource(R.string.error_invalid_endpoint)
     LlmErrorKind.KeyStoreUnavailable -> stringResource(R.string.error_keystore_unavailable)
     LlmErrorKind.SettingsUnavailable -> stringResource(R.string.error_settings_unavailable)
+}
+
+/** The localized message for why a recipe could not be translated. */
+@Composable
+fun translationErrorText(error: TranslationError): String = when (error) {
+    is TranslationError.Llm -> llmErrorText(error.kind)
+    TranslationError.Rejected -> stringResource(R.string.translate_error_rejected)
+    TranslationError.Storage -> stringResource(R.string.translate_error_storage)
 }
 
 /** Errors the user fixes in Settings, so the error offers a way there. */

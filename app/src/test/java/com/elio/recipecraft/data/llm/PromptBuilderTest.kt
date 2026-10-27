@@ -157,7 +157,20 @@ class PromptBuilderTest {
         val en = File("src/main/assets/prompts/en").list()!!.toSet()
         val zh = File("src/main/assets/prompts/zh").list()!!.toSet()
         assertEquals(en, zh)
-        assertTrue(en.containsAll(listOf("system.md", "chat.md", "generate.md", "repair.md")))
+        assertTrue(en.containsAll(listOf("system.md", "chat.md", "generate.md", "repair.md", "translate.md")))
+    }
+
+    @Test
+    fun `translate fills the target language's template with the recipe json`() = runTest {
+        language.resolved = Language.ZH // The app language does not pick the template; the target does.
+        val prompt = builder().translate("{\"name\": \"Toast {{x}}\"}", Language.EN)
+
+        assertEquals(Language.EN, prompt.language)
+        assertEquals(null, prompt.request.system)
+        val user = prompt.request.messages.single().content
+        assertTrue(user.startsWith("Translate this recipe from the RecipeCraft app into English."))
+        assertTrue(user.contains("<<<\n{\"name\": \"Toast {{x}}\"}\n>>>"))
+        assertFalse(user.contains("{{"+"languageName}}"))
     }
 
     @Test

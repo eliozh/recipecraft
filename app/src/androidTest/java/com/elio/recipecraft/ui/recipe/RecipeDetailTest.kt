@@ -25,7 +25,18 @@ import com.elio.recipecraft.data.nutrition.NutritionFood
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.data.nutrition.TableLookup
+import com.elio.recipecraft.data.llm.AndroidAssetReader
+import com.elio.recipecraft.data.llm.LlmClientFactory
+import com.elio.recipecraft.data.llm.LlmClientResult
+import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.PromptBuilder
+import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.llm.RecipeTranslator
 import com.elio.recipecraft.data.recipe.RecipeRepository
+import com.elio.recipecraft.data.recipe.RecipeTranslations
+import com.elio.recipecraft.data.settings.AppLanguageSettings
+import com.elio.recipecraft.data.settings.ProviderConfig
+import com.elio.recipecraft.domain.AppLanguage
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Ingredient
@@ -38,6 +49,8 @@ import com.elio.recipecraft.ui.library.LibraryTestTags
 import com.elio.recipecraft.ui.library.LibraryViewModel
 import com.elio.recipecraft.ui.libraryGraph
 import com.elio.recipecraft.ui.theme.RecipeCraftTheme
+import java.time.Clock
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -89,6 +102,22 @@ class RecipeDetailTest {
         RecipeRepository(database.recipes(), eggsOnly, Dispatchers.IO)
     }
 
+    /** English, the language of every recipe here, so the screen offers no Translate. */
+    private val english = object : AppLanguageSettings {
+        override val choice = AppLanguage.EN
+        override val resolvedLanguage = Language.EN
+        override fun setChoice(choice: AppLanguage) = Unit
+    }
+
+    private val translations by lazy {
+        val noKey = object : LlmClientFactory {
+            override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Unavailable(LlmErrorKind.MissingKey)
+            override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = forActiveProvider(requireModel)
+        }
+        val translator = RecipeTranslator(PromptBuilder(AndroidAssetReader(context), english, Dispatchers.IO), RecipeParser(), Clock.systemUTC())
+        RecipeTranslations(noKey, translator, repository, CoroutineScope(Dispatchers.Default))
+    }
+
     private fun setContent() {
         val undoDelete = UndoDelete()
         val library = LibraryViewModel(repository, undoDelete)
@@ -100,7 +129,7 @@ class RecipeDetailTest {
                         navController,
                         onOpenChat = {},
                         libraryViewModel = { library },
-                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete) } },
+                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations) } },
                     )
                 }
             }
@@ -184,6 +213,8 @@ class RecipeDetailTest {
                             SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to "gone")),
                             repository,
                             UndoDelete(),
+                            english,
+                            translations,
                         )
                     },
                 )

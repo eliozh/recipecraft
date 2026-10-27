@@ -1,0 +1,20 @@
+{
+  "name": "香蕉牛奶燕麦粥",
+  "mealType": "breakfast",
+  "servings": 2,
+  "aiKcal": 560,
+  "ingredients": [
+    { "name": "燕麦片", "nameEn": "rolled oats", "quantity": "1", "unit": "杯", "grams": 80, "aiKcal": 303 },
+    { "name": "全脂牛奶", "nameEn": "whole milk", "quantity": "1 1/2", "unit": "杯", "grams": 366, "aiKcal": 223 },
+    { "name": "香蕉", "nameEn": "banana", "quantity": "1", "unit": "根", "grams": 118, "aiKcal": 105 },
+    { "name": "蜂蜜", "nameEn": "honey", "quantity": "1", "unit": "茶匙", "grams": 7, "aiKcal": 21 },
+    { "name": "肉桂粉", "nameEn": "cinnamon", "quantity": "", "unit": "少许", "grams": null, "aiKcal": 0 }
+  ],
+  "tools": ["小奶锅", "木勺", "刀", "砧板"],
+  "steps": [
+    { "text": "把牛奶倒入奶锅，小火加热至微微沸腾。", "minutes": 3 },
+    { "text": "加入燕麦片，不时搅拌，煮至软糯。", "minutes": 5 },
+    { "text": "香蕉切片。", "minutes": null },
+    { "text": "把燕麦粥盛入碗中，放上香蕉片，淋上蜂蜜，撒少许肉桂粉。", "minutes": null }
+  ]
+}

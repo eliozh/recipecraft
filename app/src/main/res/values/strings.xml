@@ -207,4 +207,32 @@
         <item quantity="one">≈ %1$d kcal (AI)</item>
         <item quantity="other">≈ %1$d kcal (AI)</item>
     </plurals>
+    <string name="action_translate">Translate</string>
+    <string name="action_not_now">Not now</string>
+    <string name="action_ok">OK</string>
+    <string name="translate_offer_title">Translate saved recipes?</string>
+    <!-- %1$d a count; %2$s and %3$s language names such as "English" and "中文" -->
+    <plurals name="translate_offer_message">
+        <item quantity="one">%1$d saved recipe is in %2$s. Translate it to %3$s with AI?</item>
+        <item quantity="other">%1$d saved recipes are in %2$s. Translate them to %3$s with AI?</item>
+    </plurals>
+    <string name="translate_progress_title">Translating recipes</string>
+    <!-- "Translating 2 of 5…" -->
+    <string name="translate_progress">Translating %1$d of %2$d…</string>
+    <string name="translate_starting">Getting ready…</string>
+    <string name="translate_done_title">Translation finished</string>
+    <string name="translate_cancelled_title">Translation cancelled</string>
+    <plurals name="translate_done_translated">
+        <item quantity="one">%d recipe was translated.</item>
+        <item quantity="other">%d recipes were translated.</item>
+    </plurals>
+    <plurals name="translate_done_failed">
+        <item quantity="one">%d recipe couldn\'t be translated and was left as it was.</item>
+        <item quantity="other">%d recipes couldn\'t be translated and were left as they were.</item>
+    </plurals>
+    <string name="translate_cancelled_rest">The other recipes were left as they were.</string>
+    <string name="translate_none">There were no recipes to translate.</string>
+    <string name="translate_error_rejected">The AI\'s translation changed more than the text, so it wasn\'t used.</string>
+    <string name="translate_error_storage">Couldn\'t read or save your recipes.</string>
+    <string name="recipe_translating">Translating…</string>
 </resources>

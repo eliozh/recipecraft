@@ -4,6 +4,7 @@ import com.elio.recipecraft.data.nutrition.CalorieCalculator
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.di.IoDispatcher
+import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import javax.inject.Inject
@@ -66,6 +67,20 @@ class RecipeRepository @Inject constructor(
             recipes.map { it.copy(calories = CalorieCalculator.calculate(it, lookups)).toEntity() }
         }
         dao.upsert(entities)
+    }
+
+    /** Saved recipes in a language other than [language], newest first. */
+    suspend fun notIn(language: Language): List<Recipe> = dao.notIn(language).map { it.toDomain() }
+
+    /**
+     * Writes [recipe] over the saved recipe with its id, with calories worked out again, since a
+     * translated recipe matches tables on different names. Returns false, and saves nothing, when
+     * that recipe is no longer saved.
+     */
+    suspend fun update(recipe: Recipe): Boolean {
+        val lookups = nutrition.current()
+        val entity = withContext(ioDispatcher) { recipe.copy(calories = CalorieCalculator.calculate(recipe, lookups)).toEntity() }
+        return dao.update(entity) > 0
     }
 
     /**

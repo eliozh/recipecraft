@@ -3,8 +3,10 @@ package com.elio.recipecraft.data.recipe
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Update
 import androidx.room.Upsert
 import com.elio.recipecraft.domain.Calories
+import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
 import kotlinx.coroutines.flow.Flow
 
@@ -35,6 +37,14 @@ abstract class RecipeDao {
 
     @Query("SELECT * FROM recipes")
     abstract suspend fun all(): List<RecipeEntity>
+
+    /** Saved recipes not in [language], newest first. */
+    @Query("SELECT * FROM recipes WHERE language != :language ORDER BY createdAt DESC, rowid")
+    abstract suspend fun notIn(language: Language): List<RecipeEntity>
+
+    /** Replaces the saved recipe with the same id; returns 0 when there is none, so nothing is added. */
+    @Update
+    abstract suspend fun update(recipe: RecipeEntity): Int
 
     /** Inserts new recipes and replaces saved ones with the same id, so saving twice never duplicates. */
     @Upsert

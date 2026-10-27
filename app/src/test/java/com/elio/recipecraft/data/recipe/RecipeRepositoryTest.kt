@@ -144,5 +144,31 @@ class RecipeRepositoryTest {
         assertEquals(saved, repository.observeDetail("a").first()!!.recipe)
         assertEquals(saved.toEntity(), dao.recipes.first { it.id == "a" })
     }
-}
 
+    @Test
+    fun `recipes in another language are listed newest first`() = runTest {
+        repository.save(
+            listOf(
+                testRecipe("old", createdAt = 1),
+                testRecipe("zh", language = Language.ZH, createdAt = 2),
+                testRecipe("new", createdAt = 3),
+            ),
+        )
+        assertEquals(listOf("new", "old"), repository.notIn(Language.ZH).map { it.id })
+        assertEquals(listOf("zh"), repository.notIn(Language.EN).map { it.id })
+    }
+
+    @Test
+    fun `update rewrites a saved recipe with fresh calories and never adds one`() = runTest {
+        repository.save(listOf(testRecipe("a")))
+        nutrition.lookups = listOf(lookupOf("egg" to 143.0))
+
+        assertTrue(repository.update(testRecipe("a", name = "Renamed")))
+        val saved = dao.recipes.single().toDomain()
+        assertEquals("Renamed", saved.name)
+        assertEquals(CalorieSource.DATABASE, saved.calories.source)
+
+        assertEquals(false, repository.update(testRecipe("gone")))
+        assertEquals(listOf("a"), dao.recipes.map { it.id })
+    }
+}

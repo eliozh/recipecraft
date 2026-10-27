@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elio.recipecraft.domain.Language
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,18 @@ class SettingsRepository @Inject constructor(
 
     suspend fun setActiveProvider(type: ProviderType) {
         dataStore.edit { it[ACTIVE_PROVIDER] = type.name }
+    }
+
+    /**
+     * The app language the user last saw saved recipes in, or null before it was first stored.
+     * When the resolved language no longer matches it, the app offers to translate.
+     */
+    val lastLanguage: Flow<Language?> = dataStore.data
+        .map { prefs -> prefs[LAST_LANGUAGE]?.let { enumOrNull<Language>(it) } }
+        .distinctUntilChanged()
+
+    suspend fun setLastLanguage(language: Language) {
+        dataStore.edit { it[LAST_LANGUAGE] = language.name }
     }
 
     fun providerConfig(type: ProviderType): Flow<ProviderConfig> = dataStore.data
@@ -60,6 +73,7 @@ class SettingsRepository @Inject constructor(
 
     private companion object {
         val ACTIVE_PROVIDER = stringPreferencesKey("active_provider")
+        val LAST_LANGUAGE = stringPreferencesKey("last_language")
 
         fun modelKey(type: ProviderType) = stringPreferencesKey("provider.${type.name}.model")
         fun baseUrlKey(type: ProviderType) = stringPreferencesKey("provider.${type.name}.base_url")

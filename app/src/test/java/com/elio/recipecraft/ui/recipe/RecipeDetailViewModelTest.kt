@@ -2,13 +2,30 @@ package com.elio.recipecraft.ui.recipe
 
 import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
+import com.elio.recipecraft.data.llm.AssetReader
+import com.elio.recipecraft.data.llm.LlmClientResult
+import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.LlmEvent
+import com.elio.recipecraft.data.llm.PromptBuilder
+import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.llm.RecipeTranslator
+import com.elio.recipecraft.data.llm.TranslationError
 import com.elio.recipecraft.data.recipe.RecipeRepository
+import com.elio.recipecraft.data.recipe.RecipeTranslations
 import com.elio.recipecraft.data.recipe.toDomain
+import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.testing.FakeLanguageSettings
+import com.elio.recipecraft.testing.FakeLlmClient
+import com.elio.recipecraft.testing.FakeLlmClientFactory
 import com.elio.recipecraft.testing.FakeNutritionLookups
 import com.elio.recipecraft.testing.FakeRecipeDao
 import com.elio.recipecraft.testing.ingredient
 import com.elio.recipecraft.testing.lookupOf
 import com.elio.recipecraft.testing.testRecipe
+import com.elio.recipecraft.testing.translatedReply
+import java.io.File
+import java.time.Clock
+import kotlinx.coroutines.CoroutineScope
 import com.elio.recipecraft.ui.library.LibraryViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -31,6 +48,18 @@ class RecipeDetailViewModelTest {
     private val nutrition = FakeNutritionLookups(listOf(lookupOf("egg" to 155.0)))
     private val repository = RecipeRepository(dao, nutrition, UnconfinedTestDispatcher())
     private val undoDelete = UndoDelete()
+    private val language = FakeLanguageSettings()
+    private val client = FakeLlmClient()
+    private val translations = RecipeTranslations(
+        FakeLlmClientFactory(LlmClientResult.Ready(client)),
+        RecipeTranslator(
+            PromptBuilder(AssetReader { File("src/main/assets/$it").readText() }, language, UnconfinedTestDispatcher()),
+            RecipeParser(),
+            Clock.systemUTC(),
+        ),
+        repository,
+        CoroutineScope(UnconfinedTestDispatcher()),
+    )
 
     @Before
     fun setUp() {
@@ -46,6 +75,8 @@ class RecipeDetailViewModelTest {
         SavedStateHandle(if (id == null) emptyMap() else mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to id)),
         repository,
         undoDelete,
+        language,
+        translations,
     )
 
     private suspend fun saveEggs() {
@@ -141,5 +172,57 @@ class RecipeDetailViewModelTest {
         repository.delete("a")
         assertTrue(vm.uiState.value.notFound)
         assertNull(vm.uiState.value.recipe)
+    }
+
+    @Test
+    fun `a recipe in another language offers Translate and is translated in place`() = runTest {
+        saveEggs()
+        val original = dao.recipes.single().toDomain()
+        language.resolved = Language.ZH
+        val vm = viewModel("a")
+        assertTrue(vm.uiState.value.canTranslate)
+        client.events.trySend(LlmEvent.Delta(translatedReply(original)))
+        client.events.trySend(LlmEvent.Done(null))
+
+        vm.translate()
+
+        val translated = vm.uiState.value.recipe!!
+        assertEquals(Language.ZH, translated.language)
+        assertEquals("译 ${original.name}", translated.name)
+        assertEquals(original.id, translated.id)
+        assertEquals(original.calories, translated.calories)
+        assertFalse(vm.uiState.value.translating)
+        assertNull(vm.uiState.value.translateError)
+        assertFalse(vm.uiState.value.canTranslate)
+    }
+
+    @Test
+    fun `a recipe in the app language has no Translate until the language changes`() = runTest {
+        saveEggs()
+        val vm = viewModel("a")
+        assertFalse(vm.uiState.value.canTranslate)
+        vm.translate()
+        assertTrue(client.requests.isEmpty())
+
+        language.resolved = Language.ZH
+        vm.onResume()
+        assertTrue(vm.uiState.value.canTranslate)
+    }
+
+    @Test
+    fun `a failed translation is reported and the recipe stays as it was`() = runTest {
+        saveEggs()
+        val before = dao.recipes.single()
+        language.resolved = Language.ZH
+        val vm = viewModel("a")
+        client.events.trySend(LlmEvent.Error(LlmErrorKind.InvalidKey))
+
+        vm.translate()
+
+        assertEquals(TranslationError.Llm(LlmErrorKind.InvalidKey), vm.uiState.value.translateError)
+        assertEquals(listOf(before), dao.recipes)
+        assertTrue(vm.uiState.value.canTranslate)
+        vm.onTranslateErrorShown()
+        assertNull(vm.uiState.value.translateError)
     }
 }

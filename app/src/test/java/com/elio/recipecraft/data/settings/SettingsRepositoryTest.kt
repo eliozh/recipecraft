@@ -2,6 +2,7 @@ package com.elio.recipecraft.data.settings
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.elio.recipecraft.domain.Language
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -116,5 +117,13 @@ class SettingsRepositoryTest {
         val repo = SettingsRepository(store)
         assertEquals(ProviderType.CLAUDE, repo.activeProvider.first())
         assertEquals(Protocol.OPENAI_COMPATIBLE, repo.providerConfig(ProviderType.CUSTOM).first().protocol)
+    }
+
+    @Test
+    fun `the last language is stored`() = runTest {
+        val repo = repository()
+        assertEquals(null, repo.lastLanguage.first())
+        repo.setLastLanguage(Language.ZH)
+        assertEquals(Language.ZH, repo.lastLanguage.first())
     }
 }
