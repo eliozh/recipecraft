@@ -3,6 +3,7 @@ package com.elio.recipecraft.di
 import android.content.Context
 import androidx.room.Room
 import com.elio.recipecraft.data.AppDatabase
+import com.elio.recipecraft.data.chat.ChatDao
 import com.elio.recipecraft.data.nutrition.NutritionTableDao
 import com.elio.recipecraft.data.recipe.RecipeDao
 import dagger.Module
@@ -27,4 +28,7 @@ object DatabaseModule {
 
     @Provides
     fun provideRecipeDao(database: AppDatabase): RecipeDao = database.recipes()
+
+    @Provides
+    fun provideChatDao(database: AppDatabase): ChatDao = database.chats()
 }

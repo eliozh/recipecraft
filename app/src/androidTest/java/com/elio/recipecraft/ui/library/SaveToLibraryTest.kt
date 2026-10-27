@@ -20,6 +20,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.AppDatabase
+import com.elio.recipecraft.data.chat.ChatRepository
 import com.elio.recipecraft.data.llm.AndroidAssetReader
 import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
@@ -95,6 +96,7 @@ class SaveToLibraryTest {
             nutrition = noTables,
             recipes = repository,
             recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, noTables, Clock.systemUTC()),
+            chats = ChatRepository(database.chats(), Clock.systemUTC(), Dispatchers.IO),
         )
         val library = LibraryViewModel(repository, UndoDelete())
         compose.setContent {

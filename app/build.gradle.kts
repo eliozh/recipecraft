@@ -111,6 +111,8 @@ kover {
                     "com.elio.recipecraft.data.nutrition.NutritionTableDao_Impl*",
                     // RecipeDaoTest and AppDatabaseMigrationTest run them on a device.
                     "com.elio.recipecraft.data.recipe.RecipeDao_Impl*",
+                    // ChatDaoTest and AppDatabaseMigrationTest run them on a device.
+                    "com.elio.recipecraft.data.chat.ChatDao_Impl*",
                     // A thin wrapper over the ContentResolver; the manual SAF import covers it.
                     "com.elio.recipecraft.data.nutrition.AndroidCsvDocuments*",
                 )

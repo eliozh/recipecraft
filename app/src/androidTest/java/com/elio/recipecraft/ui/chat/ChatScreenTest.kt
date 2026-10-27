@@ -19,6 +19,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.room.Room
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.AppDatabase
+import com.elio.recipecraft.data.chat.ChatRepository
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
@@ -88,6 +89,7 @@ class ChatScreenTest {
             nutrition = nutrition,
             recipes = RecipeRepository(database.recipes(), nutrition, Dispatchers.IO),
             recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, Clock.systemUTC()),
+            chats = ChatRepository(database.chats(), Clock.systemUTC(), Dispatchers.IO),
         )
         compose.setContent {
             RecipeCraftTheme {
@@ -300,6 +302,54 @@ class ChatScreenTest {
         compose.onNodeWithTag(RecipeCardTestTags.MODIFIED).assertDoesNotExist()
         compose.onNodeWithTag(RecipeCardTestTags.SAVE).assertIsEnabled()
         compose.onNodeWithText("Banana oatmeal with milk").assertExists()
+    }
+
+    @Test
+    fun presetChipsOnAnEmptyChatSendTheirTemplateInTheAppLanguage() {
+        setContent()
+        compose.onNodeWithText(context.getString(R.string.preset_full_day)).assertExists()
+        // Follow-ups refer to recipes above, so an empty chat leaves them out.
+        compose.onNodeWithTag(PresetChipsTestTags.chip(PresetChip.MAKE_IT_VEGETARIAN)).assertDoesNotExist()
+
+        compose.onNodeWithTag(PresetChipsTestTags.chip(PresetChip.QUICK_BREAKFASTS)).performScrollTo().performClick()
+
+        compose.waitUntil(5_000) { client.requests.isNotEmpty() }
+        val sent = client.requests.single().messages.single().content
+        assertTrue(sent.contains("- Scope: breakfast\n"))
+        assertTrue(sent.contains("- Count: 3\n"))
+        assertTrue(sent.contains("<<<${context.getString(R.string.preset_quick_breakfasts_preferences)}>>>"))
+        waitForText("Breakfast × 3 · ${context.getString(R.string.preset_quick_breakfasts_preferences)}")
+        // Once the chat has messages, the chips sit in a row above the input, follow-ups first.
+        compose.onNodeWithTag(PresetChipsTestTags.chip(PresetChip.MAKE_IT_VEGETARIAN)).assertIsDisplayed().assertIsNotEnabled()
+    }
+
+    @Test
+    fun anOpenEndedChipFillsTheInputForEditing() {
+        setContent()
+        compose.onNodeWithTag(PresetChipsTestTags.chip(PresetChip.FRIDGE)).performScrollTo().performClick()
+        compose.onNodeWithTag(ChatTestTags.INPUT).assertTextContains(context.getString(R.string.preset_fridge_text).trim(), substring = true)
+        compose.waitForIdle()
+        assertTrue(client.requests.isEmpty())
+    }
+
+    @Test
+    fun newChatStartsEmptyAndRecentChatsReopensTheEarlierOne() {
+        setContent()
+        send("First question")
+        client.events.trySend(LlmEvent.Delta("First answer"))
+        client.events.trySend(LlmEvent.Done(null))
+        waitForText("First answer")
+
+        compose.onNodeWithTag(ChatTestTags.NEW_CHAT).performClick()
+        compose.onNodeWithText("First answer").assertDoesNotExist()
+        compose.onNodeWithText(context.getString(R.string.chat_empty)).assertIsDisplayed()
+
+        compose.onNodeWithTag(ChatTestTags.RECENT).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecentChatsTestTags.ITEM).fetchSemanticsNodes().size == 1 }
+        compose.onNodeWithText("First question").performClick()
+
+        waitForText("First answer")
+        compose.onNodeWithTag(RecentChatsTestTags.SHEET).assertDoesNotExist()
     }
 
     private fun fixture(name: String) =

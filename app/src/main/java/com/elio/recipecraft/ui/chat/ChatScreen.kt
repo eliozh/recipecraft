@@ -1,7 +1,12 @@
 package com.elio.recipecraft.ui.chat
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,6 +25,9 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -27,12 +35,15 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
@@ -42,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
+import com.elio.recipecraft.data.chat.ChatMessage
+import com.elio.recipecraft.data.chat.RecipeStatus
 import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.ui.common.isFixedInSettings
@@ -52,6 +65,7 @@ import com.elio.recipecraft.domain.daySets
 import com.elio.recipecraft.ui.recipe.RecipeCard
 import com.elio.recipecraft.ui.recipe.label
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ChatScreen(
     onOpenSettings: () -> Unit,
@@ -67,15 +81,22 @@ fun ChatScreen(
     }
 
     Column(modifier.fillMaxSize().imePadding()) {
+        TopAppBar(
+            title = { Text(stringResource(R.string.tab_chat)) },
+            actions = {
+                IconButton(onClick = viewModel::onShowRecent, modifier = Modifier.testTag(ChatTestTags.RECENT)) {
+                    Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.chat_recent))
+                }
+                IconButton(
+                    onClick = viewModel::onNewChat,
+                    enabled = state.messages.isNotEmpty() || state.sending,
+                    modifier = Modifier.testTag(ChatTestTags.NEW_CHAT),
+                ) {
+                    Icon(painterResource(R.drawable.ic_new_chat), contentDescription = stringResource(R.string.chat_new))
+                }
+            },
+        )
         Box(Modifier.weight(1f).fillMaxWidth()) {
-            if (state.messages.isEmpty() && state.error == null) {
-                Text(
-                    text = stringResource(R.string.chat_empty),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.Center).padding(32.dp),
-                )
-            }
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(16.dp),
@@ -104,6 +125,26 @@ fun ChatScreen(
                     item(key = "error") { ErrorCard(error, onOpenSettings) }
                 }
             }
+            // Above the list, so the chips get the taps.
+            if (state.messages.isEmpty() && state.error == null) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.align(Alignment.Center).verticalScroll(rememberScrollState()).padding(32.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.chat_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    PresetChips(
+                        chips = PresetChip.forChat(empty = true),
+                        enabled = !state.sending,
+                        onAction = viewModel::onPreset,
+                        wrap = true,
+                    )
+                }
+            }
         }
         if (state.sending) LinearProgressIndicator(Modifier.fillMaxWidth())
         GenerationComposer(
@@ -127,6 +168,24 @@ fun ChatScreen(
                 onCancel = viewModel::onModifyCancel,
             )
         }
+        // Left out while typing, so the keyboard leaves room for the messages.
+        if (state.messages.isNotEmpty() && !WindowInsets.isImeVisible) {
+            PresetChips(
+                chips = PresetChip.forChat(empty = false),
+                enabled = !state.sending,
+                onAction = viewModel::onPreset,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+        }
+        if (state.showRecent) {
+            RecentChatsSheet(
+                conversations = state.conversations,
+                openId = state.conversationId,
+                onOpen = viewModel::onOpenConversation,
+                onDelete = viewModel::onDeleteConversation,
+                onDismiss = viewModel::onHideRecent,
+            )
+        }
         Composer(
             input = state.input,
             sending = state.sending,
@@ -134,6 +193,8 @@ fun ChatScreen(
             onInputChanged = viewModel::onInputChanged,
             onSend = viewModel::onSend,
             onStop = viewModel::onStop,
+            // Typing a message folds the composer, so the keyboard leaves room for the messages.
+            onFocused = { viewModel.onComposerExpandedChanged(false) },
         )
     }
 }
@@ -343,6 +404,7 @@ private fun Composer(
     onInputChanged: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
+    onFocused: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -356,7 +418,10 @@ private fun Composer(
             maxLines = 5,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSend() }),
-            modifier = Modifier.weight(1f).testTag(ChatTestTags.INPUT),
+            modifier = Modifier
+                .weight(1f)
+                .onFocusChanged { if (it.isFocused) onFocused() }
+                .testTag(ChatTestTags.INPUT),
         )
         if (sending) {
             TextButton(onClick = onStop) { Text(stringResource(R.string.chat_stop)) }
@@ -379,4 +444,6 @@ object ChatTestTags {
     const val GENERATION_WARNING = "chat_generation_warning"
     const val SAVE_ALL = "chat_save_all"
     const val SAVE_FAILED = "chat_save_failed"
+    const val RECENT = "chat_recent"
+    const val NEW_CHAT = "chat_new"
 }

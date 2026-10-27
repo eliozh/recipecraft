@@ -253,4 +253,21 @@
     <string name="recipe_replaced">食谱已更新</string>
     <string name="recipe_saved_as_copy">已另存为副本</string>
     <string name="recipe_modify_save_failed">无法保存改动，请重试。</string>
+    <string name="chat_new">新对话</string>
+    <string name="chat_recent">最近的对话</string>
+    <string name="chat_recent_empty">还没有对话。</string>
+    <string name="chat_delete_conversation">删除对话</string>
+    <!-- 预设标签：先是标签文字，然后是它发送或填入输入框的内容 -->
+    <string name="preset_full_day">全天食谱</string>
+    <string name="preset_quick_breakfasts">3 份快手早餐</string>
+    <string name="preset_quick_breakfasts_preferences">快手，15 分钟内做好</string>
+    <string name="preset_vegetarian_day">素食一日</string>
+    <string name="preset_vegetarian_day_preferences">素食</string>
+    <string name="preset_fridge">用冰箱里的食材…</string>
+    <!-- 填入输入框，用户在后面列出食材 -->
+    <string name="preset_fridge_text">用我冰箱里的这些食材推荐一道菜：</string>
+    <string name="preset_make_vegetarian">改成素食</string>
+    <string name="preset_make_vegetarian_text">把上面的食谱改成素食。</string>
+    <string name="preset_under_500">500 千卡以内</string>
+    <string name="preset_under_500_text">调整上面的食谱，让每道每份不超过 500 千卡。</string>
 </resources>

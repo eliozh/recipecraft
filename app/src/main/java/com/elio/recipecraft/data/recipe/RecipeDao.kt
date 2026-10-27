@@ -38,6 +38,9 @@ abstract class RecipeDao {
     @Query("SELECT * FROM recipes")
     abstract suspend fun all(): List<RecipeEntity>
 
+    @Query("SELECT * FROM recipes WHERE id IN (:ids)")
+    abstract suspend fun byIds(ids: List<String>): List<RecipeEntity>
+
     /** Saved recipes not in [language], newest first. */
     @Query("SELECT * FROM recipes WHERE language != :language ORDER BY createdAt DESC, rowid")
     abstract suspend fun notIn(language: Language): List<RecipeEntity>

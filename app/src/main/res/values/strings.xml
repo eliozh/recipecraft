@@ -268,4 +268,21 @@
     <string name="recipe_replaced">Recipe updated</string>
     <string name="recipe_saved_as_copy">Saved as copy</string>
     <string name="recipe_modify_save_failed">Couldn\'t save the change. Try again.</string>
+    <string name="chat_new">New chat</string>
+    <string name="chat_recent">Recent chats</string>
+    <string name="chat_recent_empty">No chats yet.</string>
+    <string name="chat_delete_conversation">Delete chat</string>
+    <!-- Preset chips: the label, then what it sends or puts in the input, in this language -->
+    <string name="preset_full_day">Full day plan</string>
+    <string name="preset_quick_breakfasts">3 quick breakfasts</string>
+    <string name="preset_quick_breakfasts_preferences">quick, ready in 15 minutes</string>
+    <string name="preset_vegetarian_day">Vegetarian day</string>
+    <string name="preset_vegetarian_day_preferences">vegetarian</string>
+    <string name="preset_fridge">Use what\'s in my fridge…</string>
+    <!-- Put in the input; the user lists the ingredients after it -->
+    <string name="preset_fridge_text">"Suggest a recipe using what's in my fridge: "</string>
+    <string name="preset_make_vegetarian">Make it vegetarian</string>
+    <string name="preset_make_vegetarian_text">Make the recipes above vegetarian.</string>
+    <string name="preset_under_500">Under 500 kcal</string>
+    <string name="preset_under_500_text">Change the recipes above so each is under 500 kcal per serving.</string>
 </resources>

@@ -1,6 +1,10 @@
 package com.elio.recipecraft.ui.chat
 
 import app.cash.turbine.test
+import com.elio.recipecraft.data.chat.ChatMessage
+import com.elio.recipecraft.data.chat.ChatRepository
+import com.elio.recipecraft.data.chat.RecipeStatus
+import com.elio.recipecraft.data.chat.ReplyState
 import com.elio.recipecraft.data.llm.LlmClientResult
 import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmEvent
@@ -22,6 +26,7 @@ import com.elio.recipecraft.domain.daySets
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.ui.recipe.SaveState
+import com.elio.recipecraft.testing.FakeChatDao
 import com.elio.recipecraft.testing.FakeLanguageSettings
 import com.elio.recipecraft.testing.FakeLlmClient
 import com.elio.recipecraft.testing.FakeLlmClientFactory
@@ -58,6 +63,8 @@ class ChatViewModelTest {
     private var ids = 0
 
     private val clock = MutableClock(now)
+    private val chatDao = FakeChatDao()
+    private val chats = ChatRepository(chatDao, clock, UnconfinedTestDispatcher())
     private val promptBuilder = PromptBuilder(
         assets = { path -> File("src/main/assets/$path").readText() },
         languageSettings = language,
@@ -73,6 +80,7 @@ class ChatViewModelTest {
         nutrition = nutrition,
         recipes = recipes,
         recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, clock),
+        chats = chats,
     )
 
     private fun fixture(name: String) =
@@ -819,5 +827,254 @@ class ChatViewModelTest {
 
         assertTrue(vm.uiState.value.saveFailed)
         assertEquals(SaveState.CHANGED, vm.uiState.value.saveState(changed))
+    }
+
+    /** The stored messages of the only conversation, as (position, role, text, state). */
+    private fun stored() = chatDao.messages.sortedBy { it.position }.map { listOf(it.position, it.role, it.text, it.status) }
+
+    @Test
+    fun `a turn is stored at once, its reply as it streams and again when it finishes`() = runTest {
+        val vm = newViewModel()
+        vm.send("Hi")
+        assertEquals(listOf("Hi"), chatDao.conversations.map { it.title })
+        assertEquals(chatDao.conversations.single().id, vm.uiState.value.conversationId)
+        assertEquals(listOf(listOf(0L, Role.USER, "Hi", ReplyState.DONE)), stored())
+
+        client.events.send(LlmEvent.Delta("Hel"))
+        assertEquals(listOf(1L, Role.ASSISTANT, "Hel", ReplyState.STREAMING), stored()[1])
+
+        client.events.send(LlmEvent.Delta("lo"))
+        client.events.send(LlmEvent.Done(null))
+        assertEquals(listOf(1L, Role.ASSISTANT, "Hello", ReplyState.DONE), stored()[1])
+    }
+
+    @Test
+    fun `a stopped reply is stored stopped with its partial text`() = runTest {
+        val vm = newViewModel()
+        vm.send("Hi")
+        client.events.send(LlmEvent.Delta("Hel"))
+        vm.onStop()
+        assertEquals(listOf(1L, Role.ASSISTANT, "Hel", ReplyState.STOPPED), stored()[1])
+        assertEquals(ReplyState.STOPPED, vm.uiState.value.messages.last().replyState)
+    }
+
+    @Test
+    fun `a failed reply is stored with its partial text, and an empty one not at all`() = runTest {
+        val vm = newViewModel()
+        vm.send("Hi")
+        client.events.send(LlmEvent.Delta("Hel"))
+        client.events.send(LlmEvent.Error(LlmErrorKind.Network))
+        assertEquals(listOf(1L, Role.ASSISTANT, "Hel", ReplyState.ERROR), stored()[1])
+
+        vm.send("Again")
+        client.events.send(LlmEvent.Error(LlmErrorKind.Network))
+        assertEquals(listOf(0L, 1L, 2L), stored().map { it[0] })
+    }
+
+    @Test
+    fun `a new view model restores the last conversation and carries on with it`() = runTest {
+        val first = newViewModel()
+        first.generate(GenerationScope.FULL_DAY_SET, 2)
+        reply(fixture("en_full_day_x2.txt"))
+        val before = first.uiState.value
+
+        val vm = newViewModel()
+        val state = vm.uiState.value
+        assertEquals(before.messages, state.messages)
+        assertEquals(before.conversationId, state.conversationId)
+        assertFalse(state.composer.expanded)
+        assertFalse(state.sending)
+
+        vm.send("More")
+        assertEquals(listOf(0L, 1L, 2L), stored().map { it[0] })
+        assertEquals(1, chatDao.conversations.size)
+        // The restored turns go to the model as history.
+        assertEquals(3, client.requests.last().messages.size)
+    }
+
+    @Test
+    fun `a reply cut off by the app stopping comes back stopped with its partial text`() = runTest {
+        val first = newViewModel()
+        first.send("Hi")
+        client.events.send(LlmEvent.Delta("Try oat"))
+
+        val vm = newViewModel()
+        val reply = vm.uiState.value.messages.last()
+        assertEquals("Try oat", reply.text)
+        assertEquals(ReplyState.STOPPED, reply.replyState)
+        assertFalse(vm.uiState.value.sending)
+        assertNull(vm.uiState.value.streamingMessageId)
+    }
+
+    @Test
+    fun `new chat starts empty, and its first turn starts another conversation`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        reply("Sure.")
+        val firstId = vm.uiState.value.conversationId
+
+        clock.instant = now.plusSeconds(60)
+        vm.onNewChat()
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertNull(vm.uiState.value.conversationId)
+        assertTrue(vm.uiState.value.composer.expanded)
+
+        vm.send("Two")
+        val secondId = vm.uiState.value.conversationId
+        assertTrue(secondId != firstId)
+        assertEquals(listOf("Two", "One"), vm.uiState.value.conversations.map { it.title })
+        // The new chat sends no history from the old one.
+        assertEquals(1, client.requests.last().messages.size)
+    }
+
+    @Test
+    fun `new chat during a reply stops it and stores it in the old conversation`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        client.events.send(LlmEvent.Delta("Par"))
+        vm.onNewChat()
+
+        assertTrue(client.cancelled)
+        assertFalse(vm.uiState.value.sending)
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertEquals(listOf(1L, Role.ASSISTANT, "Par", ReplyState.STOPPED), stored()[1])
+    }
+
+    @Test
+    fun `a conversation reopened from the list shows its messages and is restored next time`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        reply("First reply")
+        val firstId = vm.uiState.value.conversationId!!
+        clock.instant = now.plusSeconds(60)
+        vm.onNewChat()
+        vm.send("Two")
+        reply("Second reply")
+
+        vm.onShowRecent()
+        assertTrue(vm.uiState.value.showRecent)
+        clock.instant = now.plusSeconds(120)
+        vm.onOpenConversation(firstId)
+
+        val state = vm.uiState.value
+        assertFalse(state.showRecent)
+        assertEquals(firstId, state.conversationId)
+        assertEquals(listOf(Role.USER to "One", Role.ASSISTANT to "First reply"), state.texts)
+        assertEquals(firstId, newViewModel().uiState.value.conversationId)
+
+        vm.onShowRecent()
+        vm.onOpenConversation(firstId) // already open: just closes the list
+        assertFalse(vm.uiState.value.showRecent)
+        assertEquals(state.messages, vm.uiState.value.messages)
+    }
+
+    @Test
+    fun `deleting a conversation removes it, and deleting the open one starts an empty chat`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        reply("First")
+        val firstId = vm.uiState.value.conversationId!!
+        vm.onNewChat()
+        vm.send("Two")
+        reply("Second")
+        val secondId = vm.uiState.value.conversationId!!
+
+        vm.onDeleteConversation(firstId)
+        assertEquals(listOf(secondId), vm.uiState.value.conversations.map { it.id })
+        assertEquals(secondId, vm.uiState.value.conversationId)
+
+        vm.onShowRecent()
+        vm.onDeleteConversation(secondId)
+        assertTrue(vm.uiState.value.conversations.isEmpty())
+        assertTrue(vm.uiState.value.messages.isEmpty())
+        assertNull(vm.uiState.value.conversationId)
+        assertTrue(vm.uiState.value.showRecent)
+        assertTrue(chatDao.messages.isEmpty())
+    }
+
+    @Test
+    fun `a changed recipe and its undo are stored, while the undo history is not`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+        val changed = vm.recipesOf(message)
+
+        val restored = newViewModel()
+        assertEquals(changed, restored.recipesOf(message))
+        assertFalse(restored.uiState.value.isModified(lunch.id))
+
+        vm.onUndoModify(message.id, lunch.id)
+        assertEquals(message.recipes, newViewModel().recipesOf(message))
+    }
+
+    @Test
+    fun `saved and save changes are worked out from the library on restore`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val (breakfast, lunch) = message.recipes
+        vm.onSave(breakfast)
+        vm.onSave(lunch)
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+
+        val state = newViewModel().uiState.value
+        val recipes = state.messages.last().recipes
+        assertEquals(SaveState.SAVED, state.saveState(recipes[0]))
+        assertEquals(SaveState.CHANGED, state.saveState(recipes[1]))
+        assertEquals(SaveState.UNSAVED, state.saveState(recipes[2]))
+    }
+
+    @Test
+    fun `a preset sends its request, sends its text, or fills the input`() = runTest {
+        val vm = newViewModel()
+        vm.onPreset(PresetAction.Generate(GenerationRequest(GenerationScope.BREAKFAST, 3, "quick")))
+        assertEquals(GenerationRequest(GenerationScope.BREAKFAST, 3, "quick"), vm.uiState.value.messages.first().generation)
+        val sent = client.requests.last().messages.last().content
+        assertTrue(sent.contains("Scope: breakfast"))
+        assertTrue(sent.contains("Count: 3"))
+        assertTrue(sent.contains("<<<quick>>>"))
+
+        vm.onPreset(PresetAction.Send("ignored while a reply runs"))
+        assertEquals(1, client.requests.size)
+        reply("Done.")
+
+        vm.onInputChanged("draft")
+        vm.onPreset(PresetAction.Send("Make the recipes above vegetarian."))
+        assertTrue(client.requests.last().messages.last().content.startsWith("Make the recipes above vegetarian."))
+        assertEquals("draft", vm.uiState.value.input)
+        reply("Done.")
+
+        vm.onPreset(PresetAction.Fill("In my fridge: "))
+        assertEquals("In my fridge: ", vm.uiState.value.input)
+        assertEquals(2, client.requests.size)
+    }
+
+    @Test
+    fun `retry replaces the stored reply`() = runTest {
+        val vm = newViewModel()
+        vm.send("Give me a breakfast recipe")
+        reply(fixture("en_malformed.txt"))
+        client.events.send(LlmEvent.Delta("still not json"))
+        client.events.send(LlmEvent.Done(null))
+        val failed = vm.uiState.value.messages.last()
+        assertEquals(RecipeStatus.FAILED, failed.recipeStatus)
+
+        vm.onRetry(failed.id)
+        reply(fixture("en_breakfast.txt"))
+        assertEquals(listOf(0L, 2L), stored().map { it[0] })
+        assertEquals(1, newViewModel().uiState.value.messages.last().recipes.size)
+    }
+
+    @Test
+    fun `when storage fails the chat goes on in memory`() = runTest {
+        chatDao.failWrites = true
+        val vm = newViewModel()
+        vm.send("Hi")
+        reply("Hello")
+        assertEquals(listOf(Role.USER to "Hi", Role.ASSISTANT to "Hello"), vm.uiState.value.texts)
+        assertNull(vm.uiState.value.conversationId)
+        assertTrue(chatDao.conversations.isEmpty())
     }
 }

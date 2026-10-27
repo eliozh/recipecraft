@@ -69,6 +69,12 @@ class RecipeRepository @Inject constructor(
         dao.upsert(entities)
     }
 
+    /** The saved versions of those of [ids] that are in the library, by id. */
+    suspend fun saved(ids: Collection<String>): Map<String, Recipe> {
+        if (ids.isEmpty()) return emptyMap()
+        return dao.byIds(ids.distinct()).associate { it.id to it.toDomain() }
+    }
+
     /** Saved recipes in a language other than [language], newest first. */
     suspend fun notIn(language: Language): List<Recipe> = dao.notIn(language).map { it.toDomain() }
 

@@ -18,7 +18,7 @@
 - [x] T12 Translate recipes when the language changes
 - [x] T13 Change one recipe in the chat
 - [x] T14 Change a saved recipe from its detail screen (replace or save as copy)
-- [ ] T15 Preset prompt chips and chat history that persists
+- [x] T15 Preset prompt chips and chat history that persists
 - [ ] Checkpoint B: full flow end to end including translation and CSV calorie matching; human review
 
 ## Phase 3: Devices and polish

@@ -3,6 +3,9 @@ package com.elio.recipecraft.testing
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
+import com.elio.recipecraft.data.chat.ChatDao
+import com.elio.recipecraft.data.chat.ConversationEntity
+import com.elio.recipecraft.data.chat.MessageEntity
 import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
 import com.elio.recipecraft.data.llm.LlmClientResult
@@ -149,6 +152,8 @@ class FakeRecipeDao : RecipeDao() {
         return state.value
     }
 
+    override suspend fun byIds(ids: List<String>): List<RecipeEntity> = all().filter { it.id in ids }
+
     override suspend fun notIn(language: Language): List<RecipeEntity> =
         all().withIndex()
             .sortedWith(compareByDescending<IndexedValue<RecipeEntity>> { it.value.createdAt }.thenBy { it.index })
@@ -179,6 +184,66 @@ class FakeRecipeDao : RecipeDao() {
     private fun write(change: (List<RecipeEntity>) -> List<RecipeEntity>) {
         if (failWrites) throw IllegalStateException("disk full")
         state.value = change(state.value)
+    }
+}
+
+/**
+ * An in-memory [ChatDao]. It inherits the real transaction methods; deleting a conversation
+ * deletes its messages, as the foreign key does.
+ */
+class FakeChatDao : ChatDao() {
+    private val conversationState = MutableStateFlow<List<ConversationEntity>>(emptyList())
+    private var nextId = 1L
+
+    val conversations: List<ConversationEntity> get() = conversationState.value
+    val messages = mutableListOf<MessageEntity>()
+    var failWrites = false
+
+    override fun observeConversations(): Flow<List<ConversationEntity>> =
+        conversationState.map { all -> all.sortedWith(compareByDescending<ConversationEntity> { it.updatedAt }.thenByDescending { it.id }) }
+
+    override suspend fun lastOpened(): ConversationEntity? =
+        conversations.sortedWith(compareByDescending<ConversationEntity> { it.openedAt }.thenByDescending { it.id }).firstOrNull()
+
+    override suspend fun messages(conversationId: Long): List<MessageEntity> =
+        messages.filter { it.conversationId == conversationId }.sortedBy { it.position }
+
+    override suspend fun insertConversation(conversation: ConversationEntity): Long {
+        checkWritable()
+        val id = nextId++
+        conversationState.value += conversation.copy(id = id)
+        return id
+    }
+
+    override suspend fun setUpdatedAt(id: Long, at: Long) = updateConversation(id) { it.copy(updatedAt = at) }
+
+    override suspend fun setOpenedAt(id: Long, at: Long) = updateConversation(id) { it.copy(openedAt = at) }
+
+    override suspend fun upsertMessage(message: MessageEntity) {
+        checkWritable()
+        check(conversations.any { it.id == message.conversationId }) { "FOREIGN KEY constraint failed" }
+        val index = messages.indexOfFirst { it.conversationId == message.conversationId && it.position == message.position }
+        if (index >= 0) messages[index] = message else messages += message
+    }
+
+    override suspend fun deleteMessage(conversationId: Long, position: Long) {
+        checkWritable()
+        messages.removeAll { it.conversationId == conversationId && it.position == position }
+    }
+
+    override suspend fun deleteConversation(id: Long) {
+        checkWritable()
+        conversationState.value = conversations.filter { it.id != id }
+        messages.removeAll { it.conversationId == id }
+    }
+
+    private fun updateConversation(id: Long, change: (ConversationEntity) -> ConversationEntity) {
+        checkWritable()
+        conversationState.value = conversations.map { if (it.id == id) change(it) else it }
+    }
+
+    private fun checkWritable() {
+        if (failWrites) throw IllegalStateException("disk full")
     }
 }
 
