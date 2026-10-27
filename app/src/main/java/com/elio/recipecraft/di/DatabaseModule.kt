@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.elio.recipecraft.data.AppDatabase
 import com.elio.recipecraft.data.nutrition.NutritionTableDao
+import com.elio.recipecraft.data.recipe.RecipeDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,8 +18,13 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
-        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.FILE_NAME).build()
+        Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.FILE_NAME)
+            .addMigrations(*AppDatabase.MIGRATIONS)
+            .build()
 
     @Provides
     fun provideNutritionTableDao(database: AppDatabase): NutritionTableDao = database.nutritionTables()
+
+    @Provides
+    fun provideRecipeDao(database: AppDatabase): RecipeDao = database.recipes()
 }

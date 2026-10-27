@@ -18,12 +18,16 @@ import com.elio.recipecraft.data.nutrition.NutritionTableDao
 import com.elio.recipecraft.data.nutrition.NutritionTableEntity
 import com.elio.recipecraft.data.nutrition.NutritionTableSummary
 import com.elio.recipecraft.data.nutrition.TableLookup
+import com.elio.recipecraft.data.recipe.RecipeDao
+import com.elio.recipecraft.data.recipe.RecipeEntity
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
 import com.elio.recipecraft.data.settings.ProviderType
 import com.elio.recipecraft.data.settings.SecretStore
 import com.elio.recipecraft.domain.AppLanguage
+import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.MealType
 import java.security.GeneralSecurityException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
@@ -102,9 +106,60 @@ class FakeLlmClientFactory(var result: LlmClientResult) : LlmClientFactory {
 }
 
 class FakeNutritionLookups(var lookups: List<NutritionLookup> = emptyList()) : NutritionLookups {
+    /** Set it to make [observe] emit each value the test pushes, as a table change would. */
+    var changes: Flow<List<NutritionLookup>>? = null
+
     override suspend fun current(): List<NutritionLookup> = lookups
 
-    override fun observe(): Flow<List<NutritionLookup>> = flow { emit(lookups) }
+    override fun observe(): Flow<List<NutritionLookup>> = changes ?: flow { emit(lookups) }
+}
+
+/**
+ * An in-memory [RecipeDao]. List order stands in for Room's rowid, and search follows the real
+ * query: a substring of the lowercased search text, with LIKE's escapes undone.
+ */
+class FakeRecipeDao : RecipeDao() {
+    private val state = MutableStateFlow<List<RecipeEntity>>(emptyList())
+
+    val recipes: List<RecipeEntity> get() = state.value
+    val calorieWrites = mutableListOf<String>()
+    var failReads = false
+    var failWrites = false
+
+    override fun observe(mealType: MealType?, query: String): Flow<List<RecipeEntity>> = readable().map { all ->
+        val needle = query.replace(Regex("\\\\(.)"), "$1")
+        all.filter { (mealType == null || it.mealType == mealType) && it.searchText.contains(needle) }
+            .withIndex()
+            .sortedWith(compareByDescending<IndexedValue<RecipeEntity>> { it.value.createdAt }.thenBy { it.index })
+            .map { it.value }
+    }
+
+    override fun observeIds(): Flow<List<String>> = readable().map { all -> all.map { it.id } }
+
+    override fun observeCount(): Flow<Int> = readable().map { it.size }
+
+    override suspend fun all(): List<RecipeEntity> {
+        if (failReads) throw IllegalStateException("database unreadable")
+        return state.value
+    }
+
+    override suspend fun upsert(recipes: List<RecipeEntity>) = write { all ->
+        recipes.fold(all) { acc, recipe ->
+            if (acc.any { it.id == recipe.id }) acc.map { if (it.id == recipe.id) recipe else it } else acc + recipe
+        }
+    }
+
+    override suspend fun setCalories(id: String, calories: Calories) {
+        calorieWrites += id
+        write { all -> all.map { if (it.id == id) it.copy(calories = calories) else it } }
+    }
+
+    private fun readable() = state.onStart { if (failReads) throw IllegalStateException("database unreadable") }
+
+    private fun write(change: (List<RecipeEntity>) -> List<RecipeEntity>) {
+        if (failWrites) throw IllegalStateException("disk full")
+        state.value = change(state.value)
+    }
 }
 
 /**

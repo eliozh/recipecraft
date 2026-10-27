@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,19 +37,27 @@ import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.domain.Step
 
-/** One recipe with collapsible ingredients, tools and steps. */
+/**
+ * One recipe with collapsible ingredients, tools and steps. With [onSave] it offers Save, or shows
+ * Saved once [saved] is true.
+ */
 @Composable
 fun RecipeCard(
     recipe: Recipe,
     modifier: Modifier = Modifier,
+    saved: Boolean = false,
+    onSave: (() -> Unit)? = null,
 ) {
     Card(modifier.widthIn(max = 640.dp).fillMaxWidth().testTag(RecipeCardTestTags.CARD)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(
-                recipe.name,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.semantics { heading() },
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    recipe.name,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f).semantics { heading() },
+                )
+                if (onSave != null) SaveButton(saved, onSave)
+            }
             Text(
                 listOfNotNull(
                     recipe.mealType?.let { stringResource(it.label) },
@@ -74,6 +84,19 @@ fun RecipeCard(
             Section(stringResource(R.string.recipe_steps), RecipeCardTestTags.STEPS) {
                 recipe.steps.forEach { StepRow(it) }
             }
+        }
+    }
+}
+
+@Composable
+private fun SaveButton(saved: Boolean, onSave: () -> Unit) {
+    if (saved) {
+        TextButton(onClick = {}, enabled = false, modifier = Modifier.testTag(RecipeCardTestTags.SAVED)) {
+            Text(stringResource(R.string.recipe_saved))
+        }
+    } else {
+        FilledTonalButton(onClick = onSave, modifier = Modifier.testTag(RecipeCardTestTags.SAVE)) {
+            Text(stringResource(R.string.recipe_save))
         }
     }
 }
@@ -164,4 +187,6 @@ object RecipeCardTestTags {
     const val INGREDIENTS = "recipe_ingredients"
     const val TOOLS = "recipe_tools"
     const val STEPS = "recipe_steps"
+    const val SAVE = "recipe_save"
+    const val SAVED = "recipe_saved"
 }

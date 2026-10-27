@@ -109,6 +109,8 @@ kover {
                     // AppDatabase and its generated code; NutritionTableDaoTest runs them on a device.
                     "com.elio.recipecraft.data.AppDatabase*",
                     "com.elio.recipecraft.data.nutrition.NutritionTableDao_Impl*",
+                    // RecipeDaoTest and AppDatabaseMigrationTest run them on a device.
+                    "com.elio.recipecraft.data.recipe.RecipeDao_Impl*",
                     // A thin wrapper over the ContentResolver; the manual SAF import covers it.
                     "com.elio.recipecraft.data.nutrition.AndroidCsvDocuments*",
                 )
@@ -158,6 +160,7 @@ dependencies {
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     // Compose ui-test pulls Espresso 3.5, which calls an InputManager method removed in API 37.

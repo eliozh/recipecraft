@@ -9,6 +9,7 @@ import com.elio.recipecraft.data.llm.LlmMessage.Role
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.GenerationScope
@@ -21,6 +22,7 @@ import com.elio.recipecraft.testing.FakeLanguageSettings
 import com.elio.recipecraft.testing.FakeLlmClient
 import com.elio.recipecraft.testing.FakeLlmClientFactory
 import com.elio.recipecraft.testing.FakeNutritionLookups
+import com.elio.recipecraft.testing.FakeRecipeDao
 import com.elio.recipecraft.testing.oatmealUsdaLookup
 import java.io.File
 import java.time.Clock
@@ -48,6 +50,8 @@ class ChatViewModelTest {
     private val language = FakeLanguageSettings()
     private val now = Instant.parse("2026-10-27T08:00:00Z")
     private val nutrition = FakeNutritionLookups()
+    private val recipeDao = FakeRecipeDao()
+    private val recipes = RecipeRepository(recipeDao, nutrition, UnconfinedTestDispatcher())
     private var ids = 0
 
     private fun newViewModel() = ChatViewModel(
@@ -60,6 +64,7 @@ class ChatViewModelTest {
         parser = RecipeParser(),
         assembler = RecipeAssembler(Clock.fixed(now, ZoneOffset.UTC)) { "id-${++ids}" },
         nutrition = nutrition,
+        recipes = recipes,
     )
 
     private fun fixture(name: String) =
@@ -557,5 +562,53 @@ class ChatViewModelTest {
         val history = client.requests.last().messages
         assertEquals(3, history.size)
         assertEquals(client.requests.first().messages.single(), history.first())
+    }
+
+    @Test
+    fun `save puts a recipe in the library once, and its card shows saved`() = runTest {
+        val vm = newViewModel()
+        vm.send("Give me a breakfast recipe")
+        reply(fixture("en_breakfast.txt"))
+        val recipe = vm.uiState.value.messages.last().recipes.single()
+        assertTrue(vm.uiState.value.savedIds.isEmpty())
+
+        vm.onSave(recipe)
+        vm.onSave(recipe)
+
+        assertEquals(listOf(recipe.id), recipeDao.recipes.map { it.id })
+        assertEquals(setOf(recipe.id), vm.uiState.value.savedIds)
+        assertFalse(vm.uiState.value.saveFailed)
+    }
+
+    @Test
+    fun `save all saves the recipes of one set that are not saved yet`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+        reply(fixture("en_full_day_x2.txt"))
+        val (day1, day2) = vm.uiState.value.messages.last().recipes.daySets()
+
+        vm.onSave(day1[1])
+        vm.onSaveAll(day1)
+
+        assertEquals(day1.map { it.id }.toSet(), recipeDao.recipes.map { it.id }.toSet())
+        assertEquals(3, recipeDao.recipes.size)
+        assertEquals(day1.map { it.id }.toSet(), vm.uiState.value.savedIds)
+        assertTrue(day2.none { it.id in vm.uiState.value.savedIds })
+    }
+
+    @Test
+    fun `a failed save is reported until dismissed`() = runTest {
+        val vm = newViewModel()
+        vm.send("Give me a breakfast recipe")
+        reply(fixture("en_breakfast.txt"))
+        val recipe = vm.uiState.value.messages.last().recipes.single()
+
+        recipeDao.failWrites = true
+        vm.onSave(recipe)
+        assertTrue(vm.uiState.value.saveFailed)
+        assertTrue(vm.uiState.value.savedIds.isEmpty())
+
+        vm.onSaveFailedDismissed()
+        assertFalse(vm.uiState.value.saveFailed)
     }
 }

@@ -13,7 +13,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.room.Room
 import com.elio.recipecraft.R
+import com.elio.recipecraft.data.AppDatabase
+import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
 import com.elio.recipecraft.data.llm.LlmClientResult
@@ -43,6 +46,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
+import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -59,16 +63,23 @@ class ChatScreenTest {
     private val client = ScriptedClient()
     private var openedSettings = false
 
+    private val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+
+    @After
+    fun close() = database.close()
+
     private fun setContent(result: LlmClientResult = LlmClientResult.Ready(client)) {
+        val nutrition = object : NutritionLookups {
+            override suspend fun current() = emptyList<NutritionLookup>()
+            override fun observe() = flowOf(emptyList<NutritionLookup>())
+        }
         val viewModel = ChatViewModel(
             clientFactory = FixedFactory(result),
             promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO),
             parser = RecipeParser(),
             assembler = RecipeAssembler(Clock.systemUTC()),
-            nutrition = object : NutritionLookups {
-                override suspend fun current() = emptyList<NutritionLookup>()
-                override fun observe() = flowOf(emptyList<NutritionLookup>())
-            },
+            nutrition = nutrition,
+            recipes = RecipeRepository(database.recipes(), nutrition, Dispatchers.IO),
         )
         compose.setContent {
             RecipeCraftTheme {

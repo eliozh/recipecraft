@@ -88,7 +88,13 @@ fun ChatScreen(
                         streaming = message.id == state.streamingMessageId,
                         canRetry = !state.sending,
                         onRetry = { viewModel.onRetry(message.id) },
+                        savedIds = state.savedIds,
+                        onSave = viewModel::onSave,
+                        onSaveAll = viewModel::onSaveAll,
                     )
+                }
+                if (state.saveFailed) {
+                    item(key = "save_failed") { SaveFailedCard(onDismiss = viewModel::onSaveFailedDismissed) }
                 }
                 state.error?.let { error ->
                     item(key = "error") { ErrorCard(error, onOpenSettings) }
@@ -117,7 +123,15 @@ fun ChatScreen(
 }
 
 @Composable
-private fun ChatItem(message: ChatMessage, streaming: Boolean, canRetry: Boolean, onRetry: () -> Unit) {
+private fun ChatItem(
+    message: ChatMessage,
+    streaming: Boolean,
+    canRetry: Boolean,
+    onRetry: () -> Unit,
+    savedIds: Set<String>,
+    onSave: (Recipe) -> Unit,
+    onSaveAll: (List<Recipe>) -> Unit,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Above the raw text, so Retry stays in view when the list scrolls to this reply.
         if (message.recipeStatus == RecipeStatus.FAILED) RecipeFailed(canRetry, onRetry)
@@ -134,25 +148,65 @@ private fun ChatItem(message: ChatMessage, streaming: Boolean, canRetry: Boolean
             RecipeStatus.FAILED, RecipeStatus.NONE -> Unit
         }
         message.shortfall?.let { ShortfallWarning(it) }
-        Recipes(message.recipes)
+        Recipes(message.recipes, savedIds, onSave, onSaveAll)
     }
 }
 
-/** Single recipes as a plain list, then each full-day set under its "Day n" header. */
+/** Single recipes as a plain list, then each full-day set under its "Day n" header with Save all. */
 @Composable
-private fun Recipes(recipes: List<Recipe>) {
-    recipes.filter { it.setId == null }.forEach { RecipeCard(it) }
+private fun Recipes(
+    recipes: List<Recipe>,
+    savedIds: Set<String>,
+    onSave: (Recipe) -> Unit,
+    onSaveAll: (List<Recipe>) -> Unit,
+) {
+    @Composable
+    fun SaveableCard(recipe: Recipe) = RecipeCard(recipe, saved = recipe.id in savedIds, onSave = { onSave(recipe) })
+
+    recipes.filter { it.setId == null }.forEach { SaveableCard(it) }
     recipes.daySets().forEachIndexed { i, set ->
-        Text(
-            stringResource(R.string.generation_day, i + 1),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = 8.dp)
-                .semantics { heading() }
-                .testTag(ChatTestTags.DAY_HEADER),
-        )
-        set.forEach { RecipeCard(it) }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(top = 8.dp),
+        ) {
+            Text(
+                stringResource(R.string.generation_day, i + 1),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .weight(1f)
+                    .semantics { heading() }
+                    .testTag(ChatTestTags.DAY_HEADER),
+            )
+            val allSaved = set.all { it.id in savedIds }
+            TextButton(
+                onClick = { onSaveAll(set) },
+                enabled = !allSaved,
+                modifier = Modifier.testTag(ChatTestTags.SAVE_ALL),
+            ) {
+                Text(stringResource(if (allSaved) R.string.recipe_all_saved else R.string.recipe_save_all))
+            }
+        }
+        set.forEach { SaveableCard(it) }
+    }
+}
+
+@Composable
+private fun SaveFailedCard(onDismiss: () -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        ),
+        modifier = Modifier.fillMaxWidth().testTag(ChatTestTags.SAVE_FAILED),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+        ) {
+            Text(stringResource(R.string.chat_save_failed), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_dismiss)) }
+        }
     }
 }
 
@@ -292,4 +346,6 @@ object ChatTestTags {
     const val INPUT = "chat_input"
     const val DAY_HEADER = "chat_day_header"
     const val GENERATION_WARNING = "chat_generation_warning"
+    const val SAVE_ALL = "chat_save_all"
+    const val SAVE_FAILED = "chat_save_failed"
 }

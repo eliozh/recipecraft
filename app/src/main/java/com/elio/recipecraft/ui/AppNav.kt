@@ -67,7 +67,9 @@ fun AppNav() {
             composable(TopLevelDestination.CHAT.route) {
                 ChatScreen(onOpenSettings = { navController.navigateToTopLevel(TopLevelDestination.SETTINGS) })
             }
-            composable(TopLevelDestination.LIBRARY.route) { LibraryScreen() }
+            composable(TopLevelDestination.LIBRARY.route) {
+                LibraryScreen(onOpenChat = { navController.navigateToTopLevel(TopLevelDestination.CHAT) })
+            }
             composable(TopLevelDestination.SETTINGS.route) { SettingsScreen() }
         }
     }

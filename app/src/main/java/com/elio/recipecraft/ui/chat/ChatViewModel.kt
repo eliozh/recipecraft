@@ -16,6 +16,7 @@ import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.SetGrouping
 import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.GenerationShortfall
@@ -23,10 +24,12 @@ import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -80,6 +83,10 @@ data class ChatUiState(
     val streamingMessageId: Long? = null,
     val error: LlmErrorKind? = null,
     val composer: ComposerState = ComposerState(),
+    /** Ids of the recipes already in the library, so their cards show Saved. */
+    val savedIds: Set<String> = emptySet(),
+    /** The last save did not reach the database. */
+    val saveFailed: Boolean = false,
 ) {
     val canSend: Boolean get() = !sending && input.isNotBlank()
 }
@@ -92,6 +99,7 @@ class ChatViewModel @Inject constructor(
     private val parser: RecipeParser,
     private val assembler: RecipeAssembler,
     private val nutrition: NutritionLookups,
+    private val recipes: RecipeRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -99,6 +107,15 @@ class ChatViewModel @Inject constructor(
 
     private var nextId = 0L
     private var replyJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            recipes.savedIds
+                // Room reports an unreadable database as a runtime exception; cards then offer Save, which reports the failure.
+                .catch { e -> if (e !is RuntimeException || e is CancellationException) throw e }
+                .collect { ids -> _uiState.update { it.copy(savedIds = ids) } }
+        }
+    }
 
     fun onInputChanged(text: String) {
         _uiState.update { it.copy(input = text) }
@@ -163,6 +180,30 @@ class ChatViewModel @Inject constructor(
                 )
             }
             reply(client, prompt, replyId, user.generation)
+        }
+    }
+
+    /** Saves [recipe] to the library; saving it again replaces it rather than adding a copy. */
+    fun onSave(recipe: Recipe) = save(listOf(recipe))
+
+    /** Saves the recipes of one full-day set that are not saved yet. */
+    fun onSaveAll(set: List<Recipe>) = save(set.filterNot { it.id in _uiState.value.savedIds })
+
+    fun onSaveFailedDismissed() {
+        _uiState.update { it.copy(saveFailed = false) }
+    }
+
+    private fun save(toSave: List<Recipe>) {
+        viewModelScope.launch {
+            val failed = try {
+                recipes.save(toSave)
+                false
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: RuntimeException) {
+                true
+            }
+            _uiState.update { it.copy(saveFailed = failed) }
         }
     }
 

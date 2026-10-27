@@ -1,0 +1,118 @@
+package com.elio.recipecraft.data.recipe
+
+import com.elio.recipecraft.domain.CalorieSource
+import com.elio.recipecraft.domain.Calories
+import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.MealType
+import com.elio.recipecraft.testing.FakeNutritionLookups
+import com.elio.recipecraft.testing.FakeRecipeDao
+import com.elio.recipecraft.testing.ingredient
+import com.elio.recipecraft.testing.lookupOf
+import com.elio.recipecraft.testing.testRecipe
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class RecipeRepositoryTest {
+
+    private val dao = FakeRecipeDao()
+    private val nutrition = FakeNutritionLookups()
+    private val repository = RecipeRepository(dao, nutrition, UnconfinedTestDispatcher())
+
+    @Test
+    fun `a recipe survives the trip to an entity and back`() {
+        val recipe = testRecipe(
+            "a",
+            name = "番茄炒蛋",
+            mealType = null,
+            ingredients = listOf(ingredient("鸡蛋", "egg"), ingredient("番茄", "tomato", grams = null)),
+            language = Language.ZH,
+            setId = "set-1",
+        )
+        assertEquals(recipe, recipe.toEntity().toDomain())
+    }
+
+    @Test
+    fun `the search text holds the name and both names of every ingredient, lowercased`() {
+        val recipe = testRecipe("a", name = "Tomato EGGS", ingredients = listOf(ingredient("鸡蛋", "Egg"), ingredient("Whole Milk")))
+        assertEquals("tomato eggs\n鸡蛋\negg\nwhole milk\nwhole milk", recipe.toEntity().searchText)
+    }
+
+    @Test
+    fun `saving the same recipe twice keeps one copy`() = runTest {
+        val recipe = testRecipe("a")
+        repository.save(listOf(recipe))
+        repository.save(listOf(recipe.copy(name = "Renamed")))
+
+        assertEquals(listOf("a" to "Renamed"), dao.recipes.map { it.id to it.name })
+        assertEquals(setOf("a"), repository.savedIds.first())
+        assertEquals(1, repository.count.first())
+    }
+
+    @Test
+    fun `saving works calories out against the current tables`() = runTest {
+        nutrition.lookups = listOf(lookupOf("egg" to 143.0))
+        repository.save(listOf(testRecipe("a", aiTotal = 300)))
+
+        assertEquals(Calories(143, 72, CalorieSource.DATABASE, 300), dao.recipes.single().calories)
+    }
+
+    @Test
+    fun `saving nothing writes nothing`() = runTest {
+        dao.failWrites = true
+        repository.save(emptyList())
+        assertTrue(dao.recipes.isEmpty())
+    }
+
+    @Test
+    fun `observe filters by meal type and searches names and ingredients ignoring case`() = runTest {
+        repository.save(
+            listOf(
+                testRecipe("old", name = "Oatmeal", mealType = MealType.BREAKFAST, createdAt = 1),
+                testRecipe("new", name = "番茄炒蛋", mealType = MealType.DINNER, ingredients = listOf(ingredient("番茄", "tomato")), createdAt = 2),
+            ),
+        )
+
+        assertEquals(listOf("new", "old"), repository.observe(null, "").first().map { it.id })
+        assertEquals(listOf("old"), repository.observe(MealType.BREAKFAST, "").first().map { it.id })
+        assertEquals(listOf("old"), repository.observe(null, "  OATMEAL ").first().map { it.id })
+        assertEquals(listOf("new"), repository.observe(null, "番茄").first().map { it.id })
+        assertEquals(listOf("new"), repository.observe(null, "Tomato").first().map { it.id })
+        assertEquals(emptyList<String>(), repository.observe(MealType.BREAKFAST, "tomato").first().map { it.id })
+    }
+
+    @Test
+    fun `LIKE wildcards in a search are matched literally`() = runTest {
+        repository.save(listOf(testRecipe("a", name = "100% oats"), testRecipe("b", name = "1000 oats")))
+        assertEquals(listOf("a"), repository.observe(null, "100%").first().map { it.id })
+        assertEquals("a\\%b\\_c\\\\d", RecipeDao.escapeLike("a%b_c\\d"))
+    }
+
+    @Test
+    fun `recalculating writes only the recipes whose calories changed and keeps the AI total`() = runTest {
+        repository.save(
+            listOf(
+                testRecipe("eggs", ingredients = listOf(ingredient("egg")), aiTotal = 300),
+                testRecipe("rice", ingredients = listOf(ingredient("rice")), aiTotal = 200),
+            ),
+        )
+
+        assertEquals(1, repository.recalculate(listOf(lookupOf("egg" to 143.0))))
+        assertEquals(listOf("eggs"), dao.calorieWrites)
+        assertEquals(Calories(143, 72, CalorieSource.DATABASE, 300), dao.recipes.first { it.id == "eggs" }.calories)
+        assertEquals(Calories(200, 100, CalorieSource.AI_ESTIMATE, 200), dao.recipes.first { it.id == "rice" }.calories)
+
+        // Nothing changed, so nothing is written.
+        assertEquals(0, repository.recalculate(listOf(lookupOf("egg" to 143.0))))
+        assertEquals(listOf("eggs"), dao.calorieWrites)
+
+        // The table goes away: back to the model's own estimate.
+        assertEquals(1, repository.recalculate(emptyList()))
+        assertEquals(Calories(300, 150, CalorieSource.AI_ESTIMATE, 300), dao.recipes.first { it.id == "eggs" }.calories)
+    }
+}
