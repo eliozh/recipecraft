@@ -62,7 +62,7 @@ Library versions are the latest stable releases at Task 1, pinned in the version
 
 ## Commands
 
-Run from the repo root once Task 1 is done:
+Run from the repo root once Task 1 is done, with `JAVA_HOME` exported as described in `AGENTS.md` (Build and verify):
 
 ```bash
 ./gradlew assembleDebug                        # build the debug APK
@@ -94,6 +94,7 @@ app/src/main/res/values{,-zh}/       → strings (English default, Chinese)
 app/src/test/                        → JVM unit tests, mirroring the main package
 app/src/test/resources/fixtures/     → recorded SSE streams and LLM replies (no real keys)
 app/src/androidTest/                 → Room, SecretStore and Compose UI tests
+app/schemas/                         → exported Room schemas for migration tests
 tools/nutrition/                     → script that builds the nutrition DB asset from the source data
 tasks/                               → plan.md, todo.md
 ```
