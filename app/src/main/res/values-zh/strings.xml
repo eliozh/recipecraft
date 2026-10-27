@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">食谱工坊</string>
+    <string name="tab_chat">聊天</string>
+    <string name="tab_library">食谱库</string>
+    <string name="tab_settings">设置</string>
+    <string name="chat_placeholder">与 AI 聊天来生成食谱，即将推出。</string>
+    <string name="library_placeholder">你保存的食谱会显示在这里。</string>
+    <string name="settings_placeholder">服务商、API 密钥和语言设置会显示在这里。</string>
+</resources>
