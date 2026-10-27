@@ -1,14 +1,19 @@
 package com.elio.recipecraft.ui.settings
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
@@ -28,6 +33,7 @@ import com.elio.recipecraft.data.settings.ConfigProblem
 import com.elio.recipecraft.data.settings.Protocol
 import com.elio.recipecraft.data.settings.ProviderDefaults
 import com.elio.recipecraft.data.settings.ProviderType
+import com.elio.recipecraft.ui.common.llmErrorText
 
 @Composable
 fun ProviderSettings(
@@ -39,6 +45,10 @@ fun ProviderSettings(
     onApiKeyChanged: (String) -> Unit,
     onToggleKeyVisibility: () -> Unit,
     onClearApiKey: () -> Unit,
+    onTestConnection: () -> Unit,
+    onFetchModels: () -> Unit,
+    onModelPicked: (String) -> Unit,
+    onDismissModelPicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val enabled = !state.loading
@@ -137,8 +147,118 @@ fun ProviderSettings(
                     Text(stringResource(R.string.api_key_clear))
                 }
             }
+
+            ConnectionChecks(
+                state = state,
+                enabled = enabled,
+                onTestConnection = onTestConnection,
+                onFetchModels = onFetchModels,
+            )
         }
     }
+
+    (state.modelFetch as? ModelFetchState.Loaded)?.takeIf { it.models.isNotEmpty() }?.let { loaded ->
+        ModelPickerDialog(
+            models = loaded.models,
+            selected = state.config.model,
+            onPick = onModelPicked,
+            onDismiss = onDismissModelPicker,
+        )
+    }
+}
+
+@Composable
+private fun ConnectionChecks(
+    state: SettingsUiState,
+    enabled: Boolean,
+    onTestConnection: () -> Unit,
+    onFetchModels: () -> Unit,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    ) {
+        OutlinedButton(
+            onClick = onTestConnection,
+            enabled = enabled && state.connectionTest != ConnectionTestState.Running,
+        ) {
+            Text(stringResource(R.string.settings_test_connection))
+        }
+        OutlinedButton(
+            onClick = onFetchModels,
+            enabled = enabled && state.modelFetch != ModelFetchState.Loading,
+        ) {
+            Text(stringResource(R.string.settings_fetch_models))
+        }
+    }
+    val status: Pair<String, Boolean>? = when (val test = state.connectionTest) {
+        ConnectionTestState.Idle -> null
+        ConnectionTestState.Running -> stringResource(R.string.settings_connection_testing) to false
+        ConnectionTestState.Succeeded -> stringResource(R.string.settings_connection_ok) to false
+        is ConnectionTestState.Failed ->
+            stringResource(R.string.settings_connection_failed, llmErrorText(test.kind)) to true
+    }
+    status?.let { (text, isError) -> StatusText(text, isError) }
+    val modelsStatus: Pair<String, Boolean>? = when (val fetch = state.modelFetch) {
+        ModelFetchState.Idle -> null
+        ModelFetchState.Loading -> stringResource(R.string.settings_models_loading) to false
+        is ModelFetchState.Loaded ->
+            if (fetch.models.isEmpty()) stringResource(R.string.settings_models_empty) to true else null
+        is ModelFetchState.Failed ->
+            stringResource(R.string.settings_models_failed, llmErrorText(fetch.kind)) to true
+    }
+    modelsStatus?.let { (text, isError) -> StatusText(text, isError) }
+}
+
+@Composable
+private fun StatusText(text: String, isError: Boolean) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 8.dp),
+    )
+}
+
+@Composable
+private fun ModelPickerDialog(
+    models: List<String>,
+    selected: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_pick_model)) },
+        text = {
+            LazyColumn(Modifier.selectableGroup()) {
+                items(models) { model ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = model == selected,
+                                onClick = { onPick(model) },
+                                role = Role.RadioButton,
+                            )
+                            .padding(vertical = 8.dp),
+                    ) {
+                        RadioButton(selected = model == selected, onClick = null)
+                        Text(
+                            text = model,
+                            style = MaterialTheme.typography.bodyLarge,
+                            modifier = Modifier.padding(start = 16.dp),
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        },
+    )
 }
 
 @Composable

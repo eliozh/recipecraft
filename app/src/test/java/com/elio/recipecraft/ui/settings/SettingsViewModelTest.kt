@@ -1,21 +1,23 @@
 package com.elio.recipecraft.ui.settings
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.emptyPreferences
-import com.elio.recipecraft.data.settings.AppLanguageSettings
+import com.elio.recipecraft.data.llm.LlmClientResult
+import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.LlmEvent
+import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.settings.Protocol
 import com.elio.recipecraft.data.settings.ProviderConfig
 import com.elio.recipecraft.data.settings.ProviderDefaults
 import com.elio.recipecraft.data.settings.ProviderType
-import com.elio.recipecraft.data.settings.SecretStore
 import com.elio.recipecraft.data.settings.SettingsRepository
 import com.elio.recipecraft.domain.AppLanguage
-import com.elio.recipecraft.domain.Language
-import java.security.GeneralSecurityException
+import com.elio.recipecraft.testing.FakeLanguageSettings
+import com.elio.recipecraft.testing.FakeLlmClient
+import com.elio.recipecraft.testing.FakeLlmClientFactory
+import com.elio.recipecraft.testing.FakeSecretStore
+import com.elio.recipecraft.testing.InMemoryDataStore
+import com.elio.recipecraft.testing.PLACEHOLDER_KEY
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -34,6 +36,8 @@ class SettingsViewModelTest {
 
     private val secrets = FakeSecretStore()
     private val language = FakeLanguageSettings()
+    private val client = FakeLlmClient()
+    private val factory = FakeLlmClientFactory(LlmClientResult.Ready(client))
 
     @Before
     fun setUp() {
@@ -48,7 +52,7 @@ class SettingsViewModelTest {
     // In memory, so every read and write runs on the test scheduler and advanceUntilIdle sees it.
     private fun repository() = SettingsRepository(InMemoryDataStore())
 
-    private fun viewModel(repository: SettingsRepository) = SettingsViewModel(language, repository, secrets)
+    private fun viewModel(repository: SettingsRepository) = SettingsViewModel(language, repository, secrets, factory)
 
     @Test
     fun `loads the saved active provider with its config and key`() = runTest {
@@ -200,43 +204,101 @@ class SettingsViewModelTest {
         assertEquals(Secret(PLACEHOLDER), Secret(PLACEHOLDER))
     }
 
-    private class FakeSecretStore : SecretStore {
-        val keys = mutableMapOf<ProviderType, String>()
-        var failReads = false
-        var failWrites = false
+    @Test
+    fun `test connection uses the saved config and succeeds on the first token`() = runTest {
+        val repo = repository()
+        val vm = viewModel(repo)
+        advanceUntilIdle()
+        vm.onProviderSelected(ProviderType.DEEPSEEK)
+        vm.onApiKeyChanged(PLACEHOLDER)
 
-        override suspend fun getKey(type: ProviderType): String? {
-            if (failReads) throw GeneralSecurityException("test")
-            return keys[type]
-        }
+        vm.onTestConnection()
+        assertEquals(ConnectionTestState.Running, vm.uiState.value.connectionTest)
+        client.events.send(LlmEvent.Delta("pong"))
+        advanceUntilIdle()
 
-        override suspend fun setKey(type: ProviderType, key: String) {
-            if (failWrites) throw GeneralSecurityException("test")
-            if (key.isEmpty()) keys.remove(type) else keys[type] = key
-        }
-
-        override suspend fun clear(type: ProviderType) {
-            keys.remove(type)
-        }
+        assertEquals(ConnectionTestState.Succeeded, vm.uiState.value.connectionTest)
+        assertEquals(PLACEHOLDER, secrets.keys[ProviderType.DEEPSEEK])
+        assertEquals(ProviderDefaults.config(ProviderType.DEEPSEEK) to true, factory.configs.single())
+        assertTrue("the rest of the reply is cancelled", client.cancelled)
     }
 
-    private class InMemoryDataStore : DataStore<Preferences> {
-        override val data = MutableStateFlow(emptyPreferences())
-
-        override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences =
-            transform(data.value).also { data.value = it }
+    @Test
+    fun `test connection reports a failed request`() = runTest {
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onTestConnection()
+        client.events.send(LlmEvent.Error(LlmErrorKind.InvalidKey))
+        advanceUntilIdle()
+        assertEquals(ConnectionTestState.Failed(LlmErrorKind.InvalidKey), vm.uiState.value.connectionTest)
     }
 
-    private class FakeLanguageSettings : AppLanguageSettings {
-        var current = AppLanguage.FOLLOW_SYSTEM
-        override val choice get() = current
-        override val resolvedLanguage = Language.EN
-        override fun setChoice(choice: AppLanguage) {
-            current = choice
-        }
+    @Test
+    fun `test connection reports settings that cannot make a client`() = runTest {
+        factory.result = LlmClientResult.Unavailable(LlmErrorKind.KeyStoreUnavailable)
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onTestConnection()
+        advanceUntilIdle()
+        assertEquals(
+            ConnectionTestState.Failed(LlmErrorKind.KeyStoreUnavailable),
+            vm.uiState.value.connectionTest,
+        )
+    }
+
+    @Test
+    fun `editing settings cancels a running check`() = runTest {
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onTestConnection()
+        advanceUntilIdle()
+        vm.onModelChanged("other")
+        client.events.send(LlmEvent.Done(null))
+        advanceUntilIdle()
+        assertEquals(ConnectionTestState.Idle, vm.uiState.value.connectionTest)
+        assertTrue(client.cancelled)
+    }
+
+    @Test
+    fun `fetching models works without a model and picking one saves it`() = runTest {
+        val repo = repository()
+        client.models = ModelListResult.Success(listOf("gpt-a", "gpt-b"))
+        val vm = viewModel(repo)
+        advanceUntilIdle()
+        vm.onProviderSelected(ProviderType.OPENAI)
+        advanceUntilIdle()
+
+        vm.onFetchModels()
+        assertEquals(ModelFetchState.Loading, vm.uiState.value.modelFetch)
+        advanceUntilIdle()
+        assertEquals(ModelFetchState.Loaded(listOf("gpt-a", "gpt-b")), vm.uiState.value.modelFetch)
+        assertEquals(false, factory.configs.single().second)
+
+        vm.onModelPicked("gpt-b")
+        advanceUntilIdle()
+        assertEquals(ModelFetchState.Idle, vm.uiState.value.modelFetch)
+        assertEquals("gpt-b", repo.providerConfig(ProviderType.OPENAI).first().model)
+    }
+
+    @Test
+    fun `fetching models reports failures and the picker can be dismissed`() = runTest {
+        client.models = ModelListResult.Failure(LlmErrorKind.RateLimited)
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onFetchModels()
+        advanceUntilIdle()
+        assertEquals(ModelFetchState.Failed(LlmErrorKind.RateLimited), vm.uiState.value.modelFetch)
+
+        factory.result = LlmClientResult.Unavailable(LlmErrorKind.MissingKey)
+        vm.onFetchModels()
+        advanceUntilIdle()
+        assertEquals(ModelFetchState.Failed(LlmErrorKind.MissingKey), vm.uiState.value.modelFetch)
+
+        vm.onDismissModelPicker()
+        assertEquals(ModelFetchState.Idle, vm.uiState.value.modelFetch)
     }
 
     private companion object {
-        const val PLACEHOLDER = "sk-test-PLACEHOLDER-1234"
+        const val PLACEHOLDER = PLACEHOLDER_KEY
     }
 }

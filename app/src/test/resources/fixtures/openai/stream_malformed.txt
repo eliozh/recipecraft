@@ -1,0 +1,4 @@
+data: {"id":"chatcmpl-REDACTED","choices":[{"index":0,"delta":{"content":"Try"}}]}
+
+data: {not json
+

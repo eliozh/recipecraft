@@ -1,0 +1,16 @@
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{"content":"Try"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{"content":" a tomato"},"finish_reason":null}]}
+
+: keep-alive comment
+
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{"content":" omelette."},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":5,"total_tokens":17}}
+
+data: [DONE]
+

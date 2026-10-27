@@ -2,6 +2,7 @@ package com.elio.recipecraft.ui
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -15,6 +16,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -48,15 +50,7 @@ fun AppNav() {
                     val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
                     NavigationBarItem(
                         selected = selected,
-                        onClick = {
-                            navController.navigate(destination.route) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        onClick = { navController.navigateToTopLevel(destination) },
                         icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
                         label = { Text(stringResource(destination.labelRes)) },
                     )
@@ -67,11 +61,24 @@ fun AppNav() {
         NavHost(
             navController = navController,
             startDestination = TopLevelDestination.CHAT.route,
-            modifier = Modifier.padding(innerPadding),
+            // Consumed so screens that add imePadding don't count the bottom bar twice.
+            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
         ) {
-            composable(TopLevelDestination.CHAT.route) { ChatScreen() }
+            composable(TopLevelDestination.CHAT.route) {
+                ChatScreen(onOpenSettings = { navController.navigateToTopLevel(TopLevelDestination.SETTINGS) })
+            }
             composable(TopLevelDestination.LIBRARY.route) { LibraryScreen() }
             composable(TopLevelDestination.SETTINGS.route) { SettingsScreen() }
         }
+    }
+}
+
+private fun NavHostController.navigateToTopLevel(destination: TopLevelDestination) {
+    navigate(destination.route) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
+        launchSingleTop = true
+        restoreState = true
     }
 }

@@ -16,6 +16,10 @@ import kotlinx.coroutines.withContext
 
 /** The only place API keys are kept. Implementations must never log or expose the plaintext. */
 interface SecretStore {
+    /**
+     * The saved key, or null when none is saved or it can no longer be decrypted.
+     * Throws [GeneralSecurityException] when the encryption key itself is unavailable.
+     */
     suspend fun getKey(type: ProviderType): String?
     suspend fun setKey(type: ProviderType, key: String)
     suspend fun clear(type: ProviderType)
@@ -42,10 +46,12 @@ class TinkSecretStore @Inject constructor(
 
     override suspend fun getKey(type: ProviderType): String? = withContext(ioDispatcher) {
         val sealed = dataStore.data.first()[keyFor(type)] ?: return@withContext null
+        // Outside the try: an unavailable Keystore must surface as an error, not read as "no key".
+        val aead = aead
         try {
             aead.decrypt(Base64.getDecoder().decode(sealed), associatedData(type)).decodeToString()
         } catch (_: GeneralSecurityException) {
-            // A keyset or Keystore key that no longer matches (e.g. after a restore) reads as no key.
+            // A ciphertext the current key cannot open (e.g. after a restore) reads as no key.
             null
         } catch (_: IllegalArgumentException) {
             null

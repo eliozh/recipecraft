@@ -8,6 +8,7 @@ import com.google.crypto.tink.RegistryConfiguration
 import com.google.crypto.tink.aead.AeadConfig
 import com.google.crypto.tink.aead.PredefinedAeadParameters
 import java.io.File
+import java.security.GeneralSecurityException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -108,6 +110,23 @@ class TinkSecretStoreTest {
         store.setKey(ProviderType.OPENAI, PLACEHOLDER)
         store.getKey(ProviderType.OPENAI)
         assertEquals(1, created)
+    }
+
+    @Test
+    fun `an unavailable keystore is an error, not a missing key`() = runTest {
+        val dataStore = dataStore()
+        TinkSecretStore(dataStore, { aead }, StandardTestDispatcher(testScheduler))
+            .setKey(ProviderType.OPENAI, PLACEHOLDER)
+        val store = TinkSecretStore(
+            dataStore,
+            { throw GeneralSecurityException("Keystore unavailable") },
+            StandardTestDispatcher(testScheduler),
+        )
+
+        val error = runCatching { store.getKey(ProviderType.OPENAI) }.exceptionOrNull()
+        assertTrue(error is GeneralSecurityException)
+        // With nothing stored there is nothing to decrypt, so no Keystore is needed.
+        assertNull(store.getKey(ProviderType.CLAUDE))
     }
 
     private fun newAead(): Aead {

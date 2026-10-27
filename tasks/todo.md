@@ -4,7 +4,7 @@
 - [x] T1 Project scaffold that builds and launches (JDK, Gradle, Compose shell, SDK 37/37/34, Kover set up with the rule off, .gitignore)
 - [x] T2 English/Chinese UI with system-language priority
 - [x] T3 Configure a provider and store the API key encrypted
-- [ ] T4 Stream a free chat reply through an OpenAI-compatible provider (OpenAI/DeepSeek/custom); turn on the Kover 80% gate
+- [x] T4 Stream a free chat reply through an OpenAI-compatible provider (OpenAI/DeepSeek/custom); turn on the Kover 80% gate
 - [ ] T5 Stream through Claude and Anthropic-compatible custom endpoints
 - [ ] T6 Generate one recipe and show it as a structured card (schema with nameEn/grams, prompts, parser)
 - [ ] T7 Database calorie matching against the bundled USDA table (asset, matcher, calculator, calorie label)

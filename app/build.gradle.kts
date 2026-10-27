@@ -4,6 +4,7 @@ import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kover)
@@ -84,11 +85,18 @@ kover {
             includes {
                 packages("com.elio.recipecraft.domain", "com.elio.recipecraft.data")
             }
+            excludes {
+                // Thin wrappers over the Android Keystore and LocaleManager that a JVM test cannot reach;
+                // TinkSecretStoreInstrumentedTest and the manual checks cover them.
+                classes(
+                    "com.elio.recipecraft.data.settings.KeystoreAeadProvider*",
+                    "com.elio.recipecraft.data.settings.LocaleManagerAppLanguageSettings*",
+                )
+            }
         }
         verify {
             rule("domain and data line coverage") {
-                // No domain/data code exists yet, so there is nothing to measure. T4 sets this to false.
-                disabled = true
+                disabled = false
                 minBound(80, CoverageUnit.LINE)
             }
         }
@@ -115,10 +123,21 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.tink.android)
 
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.sse)
+    implementation(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.okhttp.mockwebserver)
+    testImplementation(libs.turbine)
 
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    // Compose ui-test pulls Espresso 3.5, which calls an InputManager method removed in API 37.
+    androidTestImplementation(libs.androidx.test.espresso.core)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }

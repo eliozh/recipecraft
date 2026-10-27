@@ -2,6 +2,13 @@ package com.elio.recipecraft.ui.settings
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elio.recipecraft.data.llm.LlmClientFactory
+import com.elio.recipecraft.data.llm.LlmClientResult
+import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.LlmEvent
+import com.elio.recipecraft.data.llm.LlmMessage
+import com.elio.recipecraft.data.llm.LlmRequest
+import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ConfigProblem
 import com.elio.recipecraft.data.settings.Protocol
@@ -16,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
 import java.security.GeneralSecurityException
 import javax.inject.Inject
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +43,22 @@ class Secret(val plaintext: String) {
     }
 }
 
+/** The state of the "Test connection" check. */
+sealed interface ConnectionTestState {
+    data object Idle : ConnectionTestState
+    data object Running : ConnectionTestState
+    data object Succeeded : ConnectionTestState
+    data class Failed(val kind: LlmErrorKind) : ConnectionTestState
+}
+
+/** The state of "Fetch models"; [Loaded] shows the picker. */
+sealed interface ModelFetchState {
+    data object Idle : ModelFetchState
+    data object Loading : ModelFetchState
+    data class Loaded(val models: List<String>) : ModelFetchState
+    data class Failed(val kind: LlmErrorKind) : ModelFetchState
+}
+
 data class SettingsUiState(
     val language: AppLanguage = AppLanguage.FOLLOW_SYSTEM,
     val activeProvider: ProviderType = ProviderDefaults.activeProvider,
@@ -44,6 +68,8 @@ data class SettingsUiState(
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
     val saveFailed: Boolean = false,
+    val connectionTest: ConnectionTestState = ConnectionTestState.Idle,
+    val modelFetch: ModelFetchState = ModelFetchState.Idle,
 ) {
     val problems: Set<ConfigProblem> get() = config.problems()
 }
@@ -53,6 +79,7 @@ class SettingsViewModel @Inject constructor(
     private val languageSettings: AppLanguageSettings,
     private val settingsRepository: SettingsRepository,
     private val secretStore: SecretStore,
+    private val clientFactory: LlmClientFactory,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SettingsUiState(language = languageSettings.choice))
@@ -60,6 +87,12 @@ class SettingsViewModel @Inject constructor(
 
     // Loads and saves run one at a time in order, so a slow write can never land after a newer one.
     private val operations = Channel<suspend () -> Unit>(Channel.UNLIMITED)
+
+    // Network checks run outside the queue so a slow provider never holds up saves.
+    private var networkJob: Job? = null
+
+    // Bumped on every edit, so a check queued before the edit never starts.
+    private var checkGeneration = 0
 
     init {
         viewModelScope.launch {
@@ -89,6 +122,7 @@ class SettingsViewModel @Inject constructor(
 
     fun onProviderSelected(type: ProviderType) {
         if (type == _uiState.value.activeProvider) return retryFailedLoad()
+        resetNetworkChecks()
         _uiState.update { it.copy(activeProvider = type, loading = true, keyVisible = false) }
         enqueue {
             save { settingsRepository.setActiveProvider(type) }
@@ -104,6 +138,7 @@ class SettingsViewModel @Inject constructor(
 
     fun onApiKeyChanged(key: String) {
         val type = _uiState.value.activeProvider
+        resetNetworkChecks()
         _uiState.update { it.copy(apiKey = Secret(key), saveFailed = false) }
         enqueue { save { secretStore.setKey(type, key) } }
     }
@@ -114,7 +149,65 @@ class SettingsViewModel @Inject constructor(
         _uiState.update { it.copy(keyVisible = !it.keyVisible) }
     }
 
+    /** Sends a one-line prompt and succeeds on the first streamed token; the rest is cancelled. */
+    fun onTestConnection() = runNetworkCheck(
+        start = { it.copy(connectionTest = ConnectionTestState.Running) },
+    ) { config ->
+        val outcome = when (val result = clientFactory.forConfig(config)) {
+            is LlmClientResult.Unavailable -> ConnectionTestState.Failed(result.kind)
+            is LlmClientResult.Ready -> when (val event = result.client.stream(PING).first()) {
+                is LlmEvent.Error -> ConnectionTestState.Failed(event.kind)
+                is LlmEvent.Delta, is LlmEvent.Done -> ConnectionTestState.Succeeded
+            }
+        }
+        _uiState.update { it.copy(connectionTest = outcome) }
+    }
+
+    fun onFetchModels() = runNetworkCheck(
+        start = { it.copy(modelFetch = ModelFetchState.Loading) },
+    ) { config ->
+        val outcome = when (val result = clientFactory.forConfig(config, requireModel = false)) {
+            is LlmClientResult.Unavailable -> ModelFetchState.Failed(result.kind)
+            is LlmClientResult.Ready -> when (val models = result.client.listModels()) {
+                is ModelListResult.Success -> ModelFetchState.Loaded(models.models)
+                is ModelListResult.Failure -> ModelFetchState.Failed(models.kind)
+            }
+        }
+        _uiState.update { it.copy(modelFetch = outcome) }
+    }
+
+    fun onModelPicked(model: String) = onModelChanged(model)
+
+    fun onDismissModelPicker() {
+        _uiState.update { it.copy(modelFetch = ModelFetchState.Idle) }
+    }
+
+    /** Waits for queued saves, so the check uses the key and config the user just entered. */
+    private fun runNetworkCheck(
+        start: (SettingsUiState) -> SettingsUiState,
+        check: suspend (ProviderConfig) -> Unit,
+    ) {
+        resetNetworkChecks()
+        val generation = checkGeneration
+        _uiState.update(start)
+        enqueue {
+            if (generation != checkGeneration) return@enqueue
+            val config = _uiState.value.config
+            networkJob = viewModelScope.launch { check(config) }
+        }
+    }
+
+    private fun resetNetworkChecks() {
+        checkGeneration++
+        networkJob?.cancel()
+        networkJob = null
+        _uiState.update {
+            it.copy(connectionTest = ConnectionTestState.Idle, modelFetch = ModelFetchState.Idle)
+        }
+    }
+
     private fun updateConfig(change: (ProviderConfig) -> ProviderConfig) {
+        resetNetworkChecks()
         val config = change(_uiState.value.config)
         _uiState.update { it.copy(config = config, saveFailed = false) }
         enqueue { save { settingsRepository.updateProviderConfig(config) } }
@@ -161,5 +254,9 @@ class SettingsViewModel @Inject constructor(
 
     private fun enqueue(operation: suspend () -> Unit) {
         operations.trySend(operation)
+    }
+
+    private companion object {
+        val PING = LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, "ping")))
     }
 }

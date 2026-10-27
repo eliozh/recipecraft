@@ -41,6 +41,10 @@ fun SettingsScreen(
             onApiKeyChanged = viewModel::onApiKeyChanged,
             onToggleKeyVisibility = viewModel::onToggleKeyVisibility,
             onClearApiKey = viewModel::onClearApiKey,
+            onTestConnection = viewModel::onTestConnection,
+            onFetchModels = viewModel::onFetchModels,
+            onModelPicked = viewModel::onModelPicked,
+            onDismissModelPicker = viewModel::onDismissModelPicker,
         )
     }
 }
