@@ -24,12 +24,18 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.nutrition.CalorieCalculator
+import com.elio.recipecraft.data.nutrition.NutritionLookup
+import com.elio.recipecraft.data.nutrition.UsdaDatabase
+import com.elio.recipecraft.data.nutrition.UsdaNutritionLookups
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.ui.theme.RecipeCraftTheme
 import java.io.File
 import java.time.Clock
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,10 +49,23 @@ class RecipeCardTest {
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
-    private fun recipeFrom(fixture: String, language: Language): Recipe {
+    private fun recipeFrom(fixture: String, language: Language, lookups: List<NutritionLookup> = emptyList()): Recipe {
         val reply = javaClass.getResourceAsStream("/fixtures/replies/$fixture")!!.bufferedReader().readText()
         val batch = (RecipeParser().parse(reply) as RecipeParseResult.Success).batch
-        return RecipeAssembler(Clock.systemUTC()).assemble(batch, language).recipes.single()
+        return RecipeAssembler(Clock.systemUTC()).assemble(batch, language, lookups).recipes.single()
+    }
+
+    /** The real bundled USDA table, opened under a throwaway name. */
+    private fun withUsda(block: (List<NutritionLookup>) -> Unit) {
+        val name = "usda-card-test.db"
+        context.deleteDatabase(name)
+        val database = UsdaDatabase.open(context, name)
+        try {
+            block(runBlocking { UsdaNutritionLookups(database.foods(), Dispatchers.IO).current() })
+        } finally {
+            database.close()
+            context.deleteDatabase(name)
+        }
     }
 
     private fun setCard(recipe: Recipe, locale: Locale) {
@@ -104,6 +123,37 @@ class RecipeCardTest {
 
         compose.onNodeWithContentDescription("收起步骤").performClick()
         compose.onNodeWithText("小葱切成葱花。").assertDoesNotExist()
+    }
+
+    @Test
+    fun matchedRecipeShowsTheDatabaseTotalAndDisclaimer() = withUsda { usda ->
+        setCard(recipeFrom("en_breakfast.txt", Language.EN, usda), Locale.ENGLISH)
+
+        compose.onNodeWithText("Database").assertExists()
+        compose.onNodeWithText("≈ AI estimate").assertDoesNotExist()
+        compose.onNodeWithText("653 kcal total · 327 kcal per serving").assertExists()
+        compose.onNodeWithText("Calories are approximate and not medical advice.").assertExists()
+        saveScreenshot("recipe_card_database")
+    }
+
+    @Test
+    fun oneUnmatchedIngredientShowsTheAiEstimate() = withUsda { usda ->
+        val matched = recipeFrom("en_breakfast.txt", Language.EN, usda)
+        val ingredients = matched.ingredients.map { if (it.nameEn == "honey") it.copy(nameEn = "yuzu marmalade") else it }
+        val recipe = matched.copy(ingredients = ingredients).let { it.copy(calories = CalorieCalculator.calculate(it, usda)) }
+        setCard(recipe, Locale.ENGLISH)
+
+        compose.onNodeWithText("≈ AI estimate").assertExists()
+        compose.onNodeWithText("Database").assertDoesNotExist()
+        compose.onNodeWithText("560 kcal total · 280 kcal per serving").assertExists()
+        saveScreenshot("recipe_card_ai_estimate")
+    }
+
+    @Test
+    fun chineseCardShowsTheDisclaimerInChinese() {
+        setCard(recipeFrom("zh_breakfast.txt", Language.ZH), Locale.SIMPLIFIED_CHINESE)
+
+        compose.onNodeWithText("热量为估算值，不构成医疗建议。").assertExists()
     }
 
     /** Kept in the app's external files dir so a manual run can `adb pull` it. */

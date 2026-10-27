@@ -13,6 +13,7 @@ import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -70,6 +71,7 @@ class ChatViewModel @Inject constructor(
     private val promptBuilder: PromptBuilder,
     private val parser: RecipeParser,
     private val assembler: RecipeAssembler,
+    private val nutrition: NutritionLookups,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -181,8 +183,8 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun showRecipes(replyId: Long, result: RecipeParseResult.Success, language: Language) {
-        val recipes = assembler.assemble(result.batch, language).recipes
+    private suspend fun showRecipes(replyId: Long, result: RecipeParseResult.Success, language: Language) {
+        val recipes = assembler.assemble(result.batch, language, nutrition.current()).recipes
         updateMessage(replyId) {
             it.copy(shownText = result.prose, recipes = recipes, recipeStatus = RecipeStatus.NONE)
         }

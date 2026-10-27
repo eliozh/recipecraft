@@ -74,6 +74,8 @@
         <item quantity="one">%1$d kcal per serving</item>
         <item quantity="other">%1$d kcal per serving</item>
     </plurals>
+    <string name="recipe_calories_database">Database</string>
+    <string name="recipe_calories_disclaimer">Calories are approximate and not medical advice.</string>
     <string name="recipe_calories_unknown">Not estimated</string>
     <plurals name="recipe_servings">
         <item quantity="one">%1$d serving</item>

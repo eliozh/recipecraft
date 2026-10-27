@@ -12,7 +12,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,8 +30,6 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.elio.recipecraft.R
-import com.elio.recipecraft.domain.CalorieSource
-import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Ingredient
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
@@ -59,7 +56,12 @@ fun RecipeCard(
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            CaloriesLine(recipe.calories)
+            CaloriesLabel(recipe.calories)
+            Text(
+                stringResource(R.string.recipe_calories_disclaimer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             HorizontalDivider()
             Section(stringResource(R.string.recipe_ingredients), RecipeCardTestTags.INGREDIENTS) {
                 recipe.ingredients.forEach { Bullet(ingredientLine(it)) }
@@ -73,34 +75,6 @@ fun RecipeCard(
                 recipe.steps.forEach { StepRow(it) }
             }
         }
-    }
-}
-
-@Composable
-private fun CaloriesLine(calories: Calories) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (calories.source == CalorieSource.AI_ESTIMATE) {
-            Surface(shape = MaterialTheme.shapes.small, color = MaterialTheme.colorScheme.secondaryContainer) {
-                Text(
-                    stringResource(R.string.recipe_calories_ai_estimate),
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                )
-            }
-        }
-        val total = calories.total
-        Text(
-            if (total == null) {
-                stringResource(R.string.recipe_calories_unknown)
-            } else {
-                listOfNotNull(
-                    pluralStringResource(R.plurals.recipe_calories_total, total, total),
-                    calories.perServing?.let { pluralStringResource(R.plurals.recipe_calories_per_serving, it, it) },
-                ).joinToString(" · ")
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.testTag(RecipeCardTestTags.CALORIES),
-        )
     }
 }
 

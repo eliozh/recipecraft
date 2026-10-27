@@ -72,6 +72,8 @@
     <plurals name="recipe_calories_per_serving">
         <item quantity="other">每份 %1$d 千卡</item>
     </plurals>
+    <string name="recipe_calories_database">数据库</string>
+    <string name="recipe_calories_disclaimer">热量为估算值，不构成医疗建议。</string>
     <string name="recipe_calories_unknown">未估算</string>
     <plurals name="recipe_servings">
         <item quantity="other">%1$d 人份</item>

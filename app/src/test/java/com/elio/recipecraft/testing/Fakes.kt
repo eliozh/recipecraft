@@ -9,6 +9,11 @@ import com.elio.recipecraft.data.llm.LlmClientResult
 import com.elio.recipecraft.data.llm.LlmEvent
 import com.elio.recipecraft.data.llm.LlmRequest
 import com.elio.recipecraft.data.llm.ModelListResult
+import com.elio.recipecraft.data.nutrition.IngredientMatcher
+import com.elio.recipecraft.data.nutrition.NutritionFood
+import com.elio.recipecraft.data.nutrition.NutritionLookup
+import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
 import com.elio.recipecraft.data.settings.ProviderType
@@ -88,3 +93,19 @@ class FakeLlmClientFactory(var result: LlmClientResult) : LlmClientFactory {
         return result
     }
 }
+
+class FakeNutritionLookups(var lookups: List<NutritionLookup> = emptyList()) : NutritionLookups {
+    override suspend fun current(): List<NutritionLookup> = lookups
+}
+
+/** The kcal per 100 g that the bundled usda.db holds for the ingredients of the en_breakfast oatmeal fixture. */
+fun oatmealUsdaLookup(): NutritionLookup = TableLookup(
+    IngredientMatcher(
+        listOf(
+            NutritionFood("rolled oats", listOf("oats"), 379.0),
+            NutritionFood("whole milk", listOf("milk"), 61.0),
+            NutritionFood("banana", emptyList(), 89.0),
+            NutritionFood("honey", emptyList(), 304.0),
+        ),
+    ),
+)

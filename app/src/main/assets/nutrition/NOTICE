@@ -1,0 +1,34 @@
+usda.db: energy values from USDA FoodData Central
+==================================================
+
+usda.db holds a hand-curated subset (about 500 common ingredients) of the
+energy values, in kcal per 100 g, from two USDA FoodData Central (FDC)
+datasets:
+
+- Foundation Foods, April 2026 release
+  (FoodData_Central_foundation_food_csv_2026-04-30.zip)
+- SR Legacy, April 2018 release
+  (FoodData_Central_sr_legacy_food_csv_2018-04.zip)
+
+Source: https://fdc.nal.usda.gov/download-datasets
+
+Each row keeps its FDC id. Energy is nutrient 1008 (Energy, kcal) where the
+food has it; Foundation foods without it use 2048 (Atwater Specific Factors),
+then 2047 (Atwater General Factors). The ingredient names and aliases are
+RecipeCraft's own; tools/nutrition/aliases.csv lists every mapping and
+tools/nutrition/build_usda.py rebuilds the file.
+
+License: USDA FoodData Central data are in the public domain and published
+under the Creative Commons CC0 1.0 Universal dedication
+(https://creativecommons.org/publicdomain/zero/1.0/). USDA asks that the data
+be cited:
+
+  U.S. Department of Agriculture, Agricultural Research Service.
+  FoodData Central: Foundation Foods. Version Current: April 2026.
+  Internet: fdc.nal.usda.gov.
+
+  U.S. Department of Agriculture, Agricultural Research Service.
+  FoodData Central: SR Legacy, 2018. Internet: fdc.nal.usda.gov.
+
+USDA does not endorse RecipeCraft. Calorie figures are approximate and not
+medical advice.

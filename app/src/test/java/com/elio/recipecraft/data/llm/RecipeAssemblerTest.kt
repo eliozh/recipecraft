@@ -1,5 +1,8 @@
 package com.elio.recipecraft.data.llm
 
+import com.elio.recipecraft.data.nutrition.IngredientMatcher
+import com.elio.recipecraft.data.nutrition.NutritionFood
+import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Ingredient
@@ -98,6 +101,13 @@ class RecipeAssemblerTest {
             Language.EN,
         ).recipes.single().calories
         assertEquals(Calories(null, null, CalorieSource.AI_ESTIMATE, null), calories)
+    }
+
+    @Test
+    fun `matched ingredients give a database total and keep the ai estimate`() {
+        val usda = TableLookup(IngredientMatcher(listOf(NutritionFood("egg", emptyList(), 143.0))))
+        val calories = assembler.assemble(RecipeBatchWire(listOf(wire())), Language.EN, listOf(usda)).recipes.single().calories
+        assertEquals(Calories(total = 286, perServing = 143, source = CalorieSource.DATABASE, aiTotal = 400), calories)
     }
 
     @Test

@@ -23,6 +23,8 @@ import com.elio.recipecraft.data.llm.AndroidAssetReader
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.nutrition.NutritionLookup
+import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
 import com.elio.recipecraft.domain.AppLanguage
@@ -60,6 +62,9 @@ class ChatScreenTest {
             promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO),
             parser = RecipeParser(),
             assembler = RecipeAssembler(Clock.systemUTC()),
+            nutrition = object : NutritionLookups {
+                override suspend fun current() = emptyList<NutritionLookup>()
+            },
         )
         compose.setContent {
             RecipeCraftTheme {

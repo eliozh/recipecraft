@@ -14,6 +14,8 @@ import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.testing.FakeLanguageSettings
 import com.elio.recipecraft.testing.FakeLlmClient
 import com.elio.recipecraft.testing.FakeLlmClientFactory
+import com.elio.recipecraft.testing.FakeNutritionLookups
+import com.elio.recipecraft.testing.oatmealUsdaLookup
 import java.io.File
 import java.time.Clock
 import java.time.Instant
@@ -39,6 +41,7 @@ class ChatViewModelTest {
     private val factory = FakeLlmClientFactory(LlmClientResult.Ready(client))
     private val language = FakeLanguageSettings()
     private val now = Instant.parse("2026-10-27T08:00:00Z")
+    private val nutrition = FakeNutritionLookups()
 
     private fun newViewModel() = ChatViewModel(
         clientFactory = factory,
@@ -49,6 +52,7 @@ class ChatViewModelTest {
         ),
         parser = RecipeParser(),
         assembler = RecipeAssembler(Clock.fixed(now, ZoneOffset.UTC)) { "recipe-id" },
+        nutrition = nutrition,
     )
 
     private fun fixture(name: String) =
@@ -235,6 +239,19 @@ class ChatViewModelTest {
         assertTrue(recipe.ingredients.all { it.nameEn.isNotBlank() })
         assertEquals(1, client.requests.size)
         assertFalse(vm.uiState.value.sending)
+    }
+
+    @Test
+    fun `recipes take a database total when every ingredient matches a table`() = runTest {
+        nutrition.lookups = listOf(oatmealUsdaLookup())
+        val vm = newViewModel()
+        vm.send("Give me a breakfast recipe")
+        reply(fixture("en_breakfast.txt"))
+
+        val calories = vm.uiState.value.messages.last().recipes.single().calories
+        assertEquals(CalorieSource.DATABASE, calories.source)
+        assertEquals(653, calories.total)
+        assertEquals(560, calories.aiTotal)
     }
 
     @Test

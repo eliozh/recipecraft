@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.kover)
+    alias(libs.plugins.room)
 }
 
 android {
@@ -75,6 +76,11 @@ abstract class TraditionalChineseResTask : DefaultTask() {
     }
 }
 
+room {
+    // tools/nutrition/build_usda.py copies the table DDL and identity hash from these files.
+    schemaDirectory("$projectDir/schemas")
+}
+
 androidComponents {
     onVariants { variant ->
         val task = tasks.register<TraditionalChineseResTask>("generate${variant.name.replaceFirstChar(Char::uppercase)}TraditionalChineseRes") {
@@ -97,6 +103,9 @@ kover {
                     "com.elio.recipecraft.data.settings.KeystoreAeadProvider*",
                     "com.elio.recipecraft.data.settings.LocaleManagerAppLanguageSettings*",
                     "com.elio.recipecraft.data.llm.AndroidAssetReader*",
+                    // Room's database class and its generated code; UsdaDatabaseInstrumentedTest opens the real asset.
+                    "com.elio.recipecraft.data.nutrition.UsdaDatabase*",
+                    "com.elio.recipecraft.data.nutrition.UsdaFoodDao_Impl*",
                 )
             }
         }
@@ -132,6 +141,9 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.sse)
     implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.androidx.room.runtime)
+    ksp(libs.androidx.room.compiler)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

@@ -1,5 +1,7 @@
 package com.elio.recipecraft.data.llm
 
+import com.elio.recipecraft.data.nutrition.CalorieCalculator
+import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Ingredient
@@ -21,10 +23,18 @@ class RecipeAssembler(
     @Inject
     constructor(clock: Clock) : this(clock, { UUID.randomUUID().toString() })
 
-    /** [language] is the prompt language the reply was generated in. */
-    fun assemble(batch: RecipeBatchWire, language: Language): RecipeBatch {
+    /**
+     * [language] is the prompt language the reply was generated in. [lookups] are the nutrition tables
+     * [CalorieCalculator] tries, in order; with none, every recipe shows the model's estimate.
+     */
+    fun assemble(batch: RecipeBatchWire, language: Language, lookups: List<NutritionLookup> = emptyList()): RecipeBatch {
         val now = clock.millis()
-        return RecipeBatch(batch.recipes.map { it.toRecipe(language, now) })
+        return RecipeBatch(
+            batch.recipes.map { wire ->
+                val recipe = wire.toRecipe(language, now)
+                recipe.copy(calories = CalorieCalculator.calculate(recipe, lookups))
+            },
+        )
     }
 
     private fun RecipeWire.toRecipe(language: Language, now: Long): Recipe {
@@ -37,7 +47,7 @@ class RecipeAssembler(
             name = name.trim(),
             mealType = mealTypeOf(mealType),
             servings = servings,
-            // Until database matching exists, the model's estimate is the only figure.
+            // The model's estimate; assemble() swaps in a database total when every ingredient matches.
             calories = Calories(
                 total = aiTotal,
                 perServing = aiTotal?.let { (it.toDouble() / servings).roundToInt() },
