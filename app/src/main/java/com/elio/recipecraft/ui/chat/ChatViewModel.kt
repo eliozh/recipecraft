@@ -9,11 +9,16 @@ import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmEvent
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.data.llm.LlmRequest
+import com.elio.recipecraft.data.llm.Prompt
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
+import com.elio.recipecraft.data.llm.SetGrouping
 import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.domain.GenerationRequest
+import com.elio.recipecraft.domain.GenerationScope
+import com.elio.recipecraft.domain.GenerationShortfall
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,7 +55,21 @@ data class ChatMessage(
     val shownText: String = text,
     val recipes: List<Recipe> = emptyList(),
     val recipeStatus: RecipeStatus = RecipeStatus.NONE,
+    /** On a user turn sent from the composer: what it asked for, which the bubble summarizes. */
+    val generation: GenerationRequest? = null,
+    /** On a reply to the composer: how it fell short of the request, or null when it did not. */
+    val shortfall: GenerationShortfall? = null,
 )
+
+/** The generation composer above the chat input. */
+data class ComposerState(
+    val scope: GenerationScope = GenerationScope.FULL_DAY_SET,
+    val count: Int = 1,
+    val preferences: String = "",
+    val expanded: Boolean = true,
+) {
+    fun toRequest() = GenerationRequest(scope, count, preferences.trim())
+}
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -60,6 +79,7 @@ data class ChatUiState(
     /** The id of the assistant message that is receiving deltas. */
     val streamingMessageId: Long? = null,
     val error: LlmErrorKind? = null,
+    val composer: ComposerState = ComposerState(),
 ) {
     val canSend: Boolean get() = !sending && input.isNotBlank()
 }
@@ -89,17 +109,37 @@ class ChatViewModel @Inject constructor(
         if (!state.canSend) return
         val text = state.input.trim()
         startReply { client ->
-            val history = _uiState.value.messages.toHistory()
-            val userMessage = ChatMessage(nextId++, LlmMessage.Role.USER, text)
-            val replyId = nextId++
-            _uiState.update {
-                it.copy(
-                    messages = it.messages + userMessage + ChatMessage(replyId, LlmMessage.Role.ASSISTANT, ""),
-                    input = "",
-                    streamingMessageId = replyId,
-                )
-            }
-            generate(client, history, text, replyId)
+            val prompt = promptBuilder.chat(_uiState.value.messages.toHistory(), text)
+            val replyId = addTurn(ChatMessage(nextId++, LlmMessage.Role.USER, text)) { it.copy(input = "") }
+            reply(client, prompt, replyId, request = null)
+        }
+    }
+
+    fun onScopeChanged(scope: GenerationScope) = updateComposer { it.copy(scope = scope) }
+
+    fun onCountChanged(count: Int) =
+        updateComposer { it.copy(count = count.coerceIn(GenerationRequest.COUNT_RANGE)) }
+
+    fun onPreferencesChanged(text: String) = updateComposer { it.copy(preferences = text) }
+
+    fun onComposerExpandedChanged(expanded: Boolean) = updateComposer { it.copy(expanded = expanded) }
+
+    /** Sends the composer's request; the composer folds away so the reply has room. */
+    fun onGenerate() {
+        if (_uiState.value.sending) return
+        val request = _uiState.value.composer.toRequest()
+        startReply { client ->
+            val prompt = promptBuilder.generate(_uiState.value.messages.toHistory(), request)
+            // The filled template is what the model saw, so it is what later turns send as history.
+            val user = ChatMessage(
+                nextId++,
+                LlmMessage.Role.USER,
+                prompt.request.messages.last().content,
+                shownText = "",
+                generation = request,
+            )
+            val replyId = addTurn(user) { it.copy(composer = it.composer.copy(expanded = false)) }
+            reply(client, prompt, replyId, request)
         }
     }
 
@@ -109,7 +149,11 @@ class ChatViewModel @Inject constructor(
         val index = messages.indexOfFirst { it.id == messageId }
         val userIndex = messages.subList(0, maxOf(index, 0)).indexOfLast { it.role == LlmMessage.Role.USER }
         if (_uiState.value.sending || userIndex < 0) return
+        val user = messages[userIndex]
         startReply { client ->
+            val history = messages.subList(0, userIndex).toHistory()
+            val prompt = user.generation?.let { promptBuilder.generate(history, it) }
+                ?: promptBuilder.chat(history, user.text)
             val replyId = nextId++
             _uiState.update {
                 it.copy(
@@ -118,7 +162,7 @@ class ChatViewModel @Inject constructor(
                     streamingMessageId = replyId,
                 )
             }
-            generate(client, messages.subList(0, userIndex).toHistory(), messages[userIndex].text, replyId)
+            reply(client, prompt, replyId, user.generation)
         }
     }
 
@@ -143,8 +187,24 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private suspend fun generate(client: LlmClient, history: List<LlmMessage>, text: String, replyId: Long) {
-        val prompt = promptBuilder.chat(history, text)
+    /** Adds [user] and an empty reply that receives the deltas; returns the reply's id. */
+    private fun addTurn(user: ChatMessage, alsoChange: (ChatUiState) -> ChatUiState): Long {
+        val replyId = nextId++
+        _uiState.update {
+            alsoChange(it).copy(
+                messages = it.messages + user + ChatMessage(replyId, LlmMessage.Role.ASSISTANT, ""),
+                streamingMessageId = replyId,
+            )
+        }
+        return replyId
+    }
+
+    private fun updateComposer(transform: (ComposerState) -> ComposerState) {
+        _uiState.update { it.copy(composer = transform(it.composer)) }
+    }
+
+    /** Streams the reply to [prompt]; [request] is the composer request it answers, null for free-form chat. */
+    private suspend fun reply(client: LlmClient, prompt: Prompt, replyId: Long, request: GenerationRequest?) {
         val error = client.collectReply(prompt.request) { delta -> appendDelta(replyId, delta) }
         if (error != null) {
             _uiState.update { it.copy(error = error) }
@@ -152,12 +212,12 @@ class ChatViewModel @Inject constructor(
         }
         val reply = message(replyId)?.text ?: return
         when (val result = parser.parse(reply)) {
-            is RecipeParseResult.Success -> showRecipes(replyId, result, prompt.language)
+            is RecipeParseResult.Success -> showRecipes(replyId, result, prompt.language, request)
             is RecipeParseResult.Failure ->
                 if (result.reason == RecipeParseResult.Reason.NO_JSON) {
                     updateMessage(replyId) { it.copy(shownText = it.text, recipeStatus = RecipeStatus.NONE) }
                 } else {
-                    repair(client, replyId, reply, result, prompt.language)
+                    repair(client, replyId, reply, result, prompt.language, request)
                 }
         }
     }
@@ -169,6 +229,7 @@ class ChatViewModel @Inject constructor(
         reply: String,
         failure: RecipeParseResult.Failure,
         language: Language,
+        request: GenerationRequest?,
     ) {
         updateMessage(replyId) { it.copy(recipeStatus = RecipeStatus.REPAIRING) }
         val prompt = promptBuilder.repair(reply, failure.description, language)
@@ -176,17 +237,29 @@ class ChatViewModel @Inject constructor(
         val error = client.collectReply(prompt.request) { repaired.append(it) }
         val result = if (error == null) parser.parse(repaired.toString()) else null
         if (result is RecipeParseResult.Success) {
-            showRecipes(replyId, result.copy(prose = parser.streaming(reply).prose), language)
+            showRecipes(replyId, result.copy(prose = parser.streaming(reply).prose), language, request)
         } else {
             updateMessage(replyId) { it.copy(shownText = it.text, recipeStatus = RecipeStatus.FAILED) }
             if (error != null) _uiState.update { it.copy(error = error) }
         }
     }
 
-    private suspend fun showRecipes(replyId: Long, result: RecipeParseResult.Success, language: Language) {
-        val recipes = assembler.assemble(result.batch, language, nutrition.current()).recipes
+    private suspend fun showRecipes(
+        replyId: Long,
+        result: RecipeParseResult.Success,
+        language: Language,
+        request: GenerationRequest?,
+    ) {
+        val grouping = when {
+            request == null -> SetGrouping.NUMBERED
+            request.isFullDaySet -> SetGrouping.FULL_DAY
+            else -> SetGrouping.NONE
+        }
+        val recipes = assembler.assemble(result.batch, language, nutrition.current(), grouping).recipes
+        // A short reply is kept as it is, with a warning; asking again is up to the user.
+        val shortfall = request?.shortfall(recipes)
         updateMessage(replyId) {
-            it.copy(shownText = result.prose, recipes = recipes, recipeStatus = RecipeStatus.NONE)
+            it.copy(shownText = result.prose, recipes = recipes, recipeStatus = RecipeStatus.NONE, shortfall = shortfall)
         }
     }
 

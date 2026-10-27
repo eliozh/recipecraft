@@ -24,9 +24,15 @@ import kotlinx.serialization.json.JsonTransformingSerializer
  *       "aiKcal": 286
  *     }],
  *     "tools": ["Non-stick pan"],
- *     "steps": [{ "text": "Whisk the eggs.", "minutes": 2 }]
+ *     "steps": [{ "text": "Whisk the eggs.", "minutes": 2 }],
+ *     "set": 1                                        // optional, see below
  *   }]
  * }
+ *
+ * `set` (added with the generation composer, T9) is optional: a 1-based number that marks which
+ * full-day set a recipe belongs to. Replies without it, including every earlier one, still decode.
+ * RecipeAssembler turns each set number into one generated setId and, for a full-day request whose
+ * reply leaves `set` out, falls back to grouping by meal order (see SetGrouping).
  *
  * The app adds id, timestamps, language, setId and the calorie source. Every field has a default
  * so a missing optional one never fails the whole reply; RecipeParser checks the required ones.
@@ -45,6 +51,8 @@ data class RecipeWire(
     val ingredients: List<IngredientWire> = emptyList(),
     val tools: List<String> = emptyList(),
     val steps: List<@Serializable(with = TolerantStepSerializer::class) StepWire> = emptyList(),
+    /** The 1-based full-day set this recipe belongs to; null for a single recipe. */
+    val set: Double? = null,
 )
 
 @Serializable

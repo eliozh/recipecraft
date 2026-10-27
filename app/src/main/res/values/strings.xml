@@ -138,4 +138,39 @@
     <string name="action_import">Import</string>
     <string name="action_delete">Delete</string>
     <string name="action_dismiss">Dismiss</string>
+    <string name="composer_title">Generate recipes</string>
+    <string name="composer_show">Show the recipe generator</string>
+    <string name="composer_hide">Hide the recipe generator</string>
+    <string name="composer_scope">Meal</string>
+    <string name="composer_scope_full_day">Full-day set</string>
+    <string name="composer_count">How many</string>
+    <plurals name="composer_count_sets">
+        <item quantity="one">%1$d set</item>
+        <item quantity="other">%1$d sets</item>
+    </plurals>
+    <plurals name="composer_count_recipes">
+        <item quantity="one">%1$d recipe</item>
+        <item quantity="other">%1$d recipes</item>
+    </plurals>
+    <string name="composer_count_decrease">Fewer</string>
+    <string name="composer_count_increase">More</string>
+    <string name="composer_preferences">Preferences (optional)</string>
+    <string name="composer_preferences_hint">Vegetarian, under 500 kcal…</string>
+    <string name="composer_generate">Generate</string>
+    <!-- scope, count: "Full-day set × 2" -->
+    <string name="generation_summary">%1$s × %2$d</string>
+    <!-- summary, preferences -->
+    <string name="generation_summary_preferences">%1$s · %2$s</string>
+    <string name="generation_day">Day %1$d</string>
+    <plurals name="generation_short_sets">
+        <item quantity="one">Asked for %1$d full-day set, got %2$d.</item>
+        <item quantity="other">Asked for %1$d full-day sets, got %2$d.</item>
+    </plurals>
+    <plurals name="generation_short_recipes">
+        <item quantity="one">Asked for %1$d recipe, got %2$d.</item>
+        <item quantity="other">Asked for %1$d recipes, got %2$d.</item>
+    </plurals>
+    <!-- day number, missing meals joined with list_separator -->
+    <string name="generation_incomplete_set">Day %1$d is missing %2$s.</string>
+    <string name="list_separator">", "</string>
 </resources>

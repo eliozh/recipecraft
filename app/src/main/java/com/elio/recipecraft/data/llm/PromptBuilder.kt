@@ -3,6 +3,7 @@ package com.elio.recipecraft.data.llm
 import android.content.Context
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.di.IoDispatcher
+import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.Language
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -30,10 +31,27 @@ class PromptBuilder @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
 
-    /** A chat turn in the current app language; [history] is sent as is and [request] goes through `generate.md`. */
-    suspend fun chat(history: List<LlmMessage>, request: String): Prompt {
+    /** A free-form chat turn in the current app language; [history] is sent as is and [request] goes through `chat.md`. */
+    suspend fun chat(history: List<LlmMessage>, request: String): Prompt =
+        turn(history, "chat", mapOf("request" to request))
+
+    /** A composer request in the current app language, through `generate.md`; [history] is sent as is. */
+    suspend fun generate(history: List<LlmMessage>, request: GenerationRequest): Prompt =
+        turn(
+            history,
+            "generate",
+            mapOf(
+                // Schema words, the same in both languages, so the template can refer to them.
+                "scope" to request.scope.name.lowercase(),
+                "count" to request.count.toString(),
+                "total" to request.expectedRecipes.toString(),
+                "preferences" to request.preferences.trim(),
+            ),
+        )
+
+    private suspend fun turn(history: List<LlmMessage>, template: String, values: Map<String, String>): Prompt {
         val language = languageSettings.resolvedLanguage
-        val user = template(language, "generate", mapOf("request" to request))
+        val user = template(language, template, values)
         return Prompt(LlmRequest(history + LlmMessage(LlmMessage.Role.USER, user), system(language)), language)
     }
 

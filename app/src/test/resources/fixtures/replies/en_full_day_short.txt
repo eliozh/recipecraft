@@ -1,0 +1,155 @@
+Here is one full day and a breakfast for the next.
+```json
+{
+  "recipes": [
+    {
+      "name": "Greek yogurt parfait",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 188,
+      "ingredients": [
+        {
+          "name": "Greek yogurt",
+          "nameEn": "greek yogurt",
+          "quantity": "1",
+          "unit": "cup",
+          "grams": 245,
+          "aiKcal": 146
+        },
+        {
+          "name": "Blueberries",
+          "nameEn": "blueberry",
+          "quantity": "1/2",
+          "unit": "cup",
+          "grams": 74,
+          "aiKcal": 42
+        }
+      ],
+      "tools": [
+        "Bowl",
+        "Spoon"
+      ],
+      "steps": [
+        {
+          "text": "Layer the yogurt and berries in a bowl.",
+          "minutes": 2
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Chicken salad wrap",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 428,
+      "ingredients": [
+        {
+          "name": "Chicken breast",
+          "nameEn": "chicken breast",
+          "quantity": "150",
+          "unit": "g",
+          "grams": 150,
+          "aiKcal": 248
+        },
+        {
+          "name": "Flour tortilla",
+          "nameEn": "flour tortilla",
+          "quantity": "1",
+          "unit": "",
+          "grams": 60,
+          "aiKcal": 180
+        }
+      ],
+      "tools": [
+        "Knife",
+        "Cutting board"
+      ],
+      "steps": [
+        {
+          "text": "Slice the cooked chicken.",
+          "minutes": 3
+        },
+        {
+          "text": "Fill the tortilla and roll it up.",
+          "minutes": 2
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Salmon with roasted vegetables",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 685,
+      "ingredients": [
+        {
+          "name": "Salmon fillet",
+          "nameEn": "salmon",
+          "quantity": "2",
+          "unit": "fillets",
+          "grams": 300,
+          "aiKcal": 624
+        },
+        {
+          "name": "Broccoli",
+          "nameEn": "broccoli",
+          "quantity": "2",
+          "unit": "cups",
+          "grams": 180,
+          "aiKcal": 61
+        }
+      ],
+      "tools": [
+        "Baking tray",
+        "Oven"
+      ],
+      "steps": [
+        {
+          "text": "Heat the oven to 200 °C.",
+          "minutes": 10
+        },
+        {
+          "text": "Roast the salmon and broccoli.",
+          "minutes": 15
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Peanut butter toast",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 348,
+      "ingredients": [
+        {
+          "name": "Whole wheat bread",
+          "nameEn": "whole wheat bread",
+          "quantity": "2",
+          "unit": "slices",
+          "grams": 64,
+          "aiKcal": 160
+        },
+        {
+          "name": "Peanut butter",
+          "nameEn": "peanut butter",
+          "quantity": "2",
+          "unit": "tbsp",
+          "grams": 32,
+          "aiKcal": 188
+        }
+      ],
+      "tools": [
+        "Toaster",
+        "Knife"
+      ],
+      "steps": [
+        {
+          "text": "Toast the bread and spread the peanut butter.",
+          "minutes": 3
+        }
+      ],
+      "set": 2
+    }
+  ]
+}
+```

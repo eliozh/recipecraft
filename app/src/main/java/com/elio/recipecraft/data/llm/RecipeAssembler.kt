@@ -4,6 +4,7 @@ import com.elio.recipecraft.data.nutrition.CalorieCalculator
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.Calories
+import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.Ingredient
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
@@ -14,6 +15,23 @@ import java.time.Clock
 import java.util.UUID
 import javax.inject.Inject
 import kotlin.math.roundToInt
+
+/** How [RecipeAssembler.assemble] gives recipes a shared setId. */
+enum class SetGrouping {
+    /** A single-meal request: every setId stays null. */
+    NONE,
+
+    /** Free-form chat: recipes share a setId by their `set` number when every recipe has one; otherwise none. */
+    NUMBERED,
+
+    /**
+     * A full-day request: by `set` number when every recipe has one. Otherwise, as a fallback, by meal
+     * order: walking the reply in order, a breakfast, lunch or dinner that does not come later in the
+     * day than the previous one starts the next set, so B L D B L D makes two sets. A snack, a dessert
+     * or a recipe without a meal type joins the current set.
+     */
+    FULL_DAY,
+}
 
 /** Turns the model's wire recipes into domain recipes: the app owns ids, timestamps, language and calorie source. */
 class RecipeAssembler(
@@ -27,14 +45,50 @@ class RecipeAssembler(
      * [language] is the prompt language the reply was generated in. [lookups] are the nutrition tables
      * [CalorieCalculator] tries, in order; with none, every recipe shows the model's estimate.
      */
-    fun assemble(batch: RecipeBatchWire, language: Language, lookups: List<NutritionLookup> = emptyList()): RecipeBatch {
+    fun assemble(
+        batch: RecipeBatchWire,
+        language: Language,
+        lookups: List<NutritionLookup> = emptyList(),
+        grouping: SetGrouping = SetGrouping.NONE,
+    ): RecipeBatch {
         val now = clock.millis()
+        val sets = setNumbers(batch.recipes, grouping)
+        val setIds = sets.filterNotNull().distinct().associateWith { newId() }
         return RecipeBatch(
-            batch.recipes.map { wire ->
-                val recipe = wire.toRecipe(language, now)
-                recipe.copy(calories = CalorieCalculator.calculate(recipe, lookups))
-            },
+            batch.recipes.zip(sets)
+                // Stable, so the recipes of a set stay together and in the model's order.
+                .sortedBy { (_, set) -> set ?: 0 }
+                .map { (wire, set) ->
+                    val recipe = wire.toRecipe(language, now).copy(setId = set?.let(setIds::getValue))
+                    recipe.copy(calories = CalorieCalculator.calculate(recipe, lookups))
+                },
         )
+    }
+
+    /** The set each recipe belongs to, by index; null for a recipe outside any set. */
+    private fun setNumbers(recipes: List<RecipeWire>, grouping: SetGrouping): List<Int?> {
+        val numbers = recipes.map { wire -> wire.set?.roundToInt()?.takeIf { it >= 1 } }
+        val allNumbered = numbers.all { it != null }
+        return when {
+            grouping == SetGrouping.NONE -> numbers.map { null }
+            allNumbered -> numbers
+            grouping == SetGrouping.FULL_DAY -> byMealOrder(recipes)
+            else -> numbers.map { null }
+        }
+    }
+
+    private fun byMealOrder(recipes: List<RecipeWire>): List<Int> {
+        var set = 0
+        var lastRank = -1
+        return recipes.map { wire ->
+            val rank = GenerationRequest.FULL_DAY_MEALS.indexOf(mealTypeOf(wire.mealType))
+            if (set == 0 || (rank >= 0 && rank <= lastRank)) {
+                set++
+                lastRank = -1
+            }
+            if (rank >= 0) lastRank = rank
+            set
+        }
     }
 
     private fun RecipeWire.toRecipe(language: Language, now: Long): Recipe {

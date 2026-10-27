@@ -23,7 +23,8 @@ Reply with one short sentence of prose, then exactly one fenced ```json block, a
         }
       ],
       "tools": [string],
-      "steps": [ { "text": string, "minutes": integer | null } ]
+      "steps": [ { "text": string, "minutes": integer | null } ],
+      "set": integer               (optional: only for full-day sets, see below)
     }
   ]
 }
@@ -37,6 +38,7 @@ Rules:
 - `tools`: the kitchen tools the method needs.
 - `steps`: in order, one action each. Give `minutes` when a step takes noticeable time, otherwise null.
 - If the user does not say how many people to cook for, choose a sensible number of servings.
+- `set`: only when the user asks for full-day sets (a breakfast, a lunch and a dinner for one day). Number the sets from 1 and give each recipe the number of its set. Leave `set` out of every other recipe.
 
 ## Example
 

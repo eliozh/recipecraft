@@ -148,7 +148,7 @@ private fun ingredientLine(ingredient: Ingredient): String {
     return line.replace(Regex("\\s+"), " ").trim()
 }
 
-private val MealType.label: Int
+internal val MealType.label: Int
     get() = when (this) {
         MealType.BREAKFAST -> R.string.meal_breakfast
         MealType.LUNCH -> R.string.meal_lunch

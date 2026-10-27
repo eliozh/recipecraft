@@ -23,7 +23,8 @@
         }
       ],
       "tools": [string],
-      "steps": [ { "text": string, "minutes": integer | null } ]
+      "steps": [ { "text": string, "minutes": integer | null } ],
+      "set": integer               （可选：仅用于全天套餐，见下文）
     }
   ]
 }
@@ -37,6 +38,7 @@
 - `tools`：做法需要的厨具。
 - `steps`：按顺序，每步一个动作。步骤需要明显时间时给出 `minutes`，否则为 null。
 - 如果用户没说几人份，请选择合理的份数。
+- `set`：仅当用户要全天套餐（同一天的早餐、午餐和晚餐）时使用。套餐从 1 开始编号，每道食谱写上所属套餐的编号。其他食谱都不要写 `set`。
 
 ## 示例
 

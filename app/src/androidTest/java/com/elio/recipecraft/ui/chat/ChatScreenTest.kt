@@ -2,6 +2,8 @@ package com.elio.recipecraft.ui.chat
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -157,6 +159,62 @@ class ChatScreenTest {
         compose.onNodeWithText(bad).assertExists()
         compose.onNodeWithText(context.getString(R.string.action_retry)).assertIsDisplayed().performClick()
         compose.waitUntil(5_000) { client.requests.size == 3 }
+    }
+
+    @Test
+    fun theComposerAsksForTwoFullDaySetsAndShowsThemUnderDayHeaders() {
+        setContent()
+        compose.onNodeWithText(context.getString(R.string.composer_scope_full_day)).performClick()
+        compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick()
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("2 sets")
+        compose.onNodeWithTag(ComposerTestTags.PREFERENCES).performTextInput("vegetarian")
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).performClick()
+
+        waitForText("Full-day set × 2 · vegetarian")
+        compose.waitUntil(5_000) { client.requests.isNotEmpty() }
+        assertTrue(client.requests.single().messages.single().content.contains("- Count: 2\n"))
+        // The composer folds away so the reply has room.
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).assertDoesNotExist()
+
+        client.events.trySend(LlmEvent.Delta(fixture("en_full_day_x2.txt")))
+        client.events.trySend(LlmEvent.Done(null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecipeCardTestTags.CARD).fetchSemanticsNodes().size == 6 }
+        compose.onAllNodesWithTag(ChatTestTags.DAY_HEADER).assertCountEquals(2)
+        compose.onNodeWithText("Day 1").assertExists()
+        compose.onNodeWithText("Day 2").assertExists()
+        compose.onNodeWithTag(ChatTestTags.GENERATION_WARNING).assertDoesNotExist()
+    }
+
+    @Test
+    fun aShortReplyKeepsItsRecipesAndWarns() {
+        setContent()
+        compose.onNodeWithText(context.getString(R.string.meal_dinner)).performClick()
+        repeat(3) { compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick() }
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("4 recipes")
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).performClick()
+
+        waitForText("Dinner × 4")
+        client.events.trySend(LlmEvent.Delta(fixture("en_dinner_x3.txt")))
+        client.events.trySend(LlmEvent.Done(null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecipeCardTestTags.CARD).fetchSemanticsNodes().size == 3 }
+        compose.onNodeWithTag(ChatTestTags.GENERATION_WARNING).assertExists()
+        compose.onNodeWithText("Asked for 4 recipes, got 3.").assertExists()
+        compose.onAllNodesWithTag(ChatTestTags.DAY_HEADER).assertCountEquals(0)
+    }
+
+    @Test
+    fun theComposerCollapsesAndExpandsAndTheStepperStaysInRange() {
+        setContent()
+        compose.onNodeWithTag(ComposerTestTags.DECREASE).assertIsNotEnabled()
+        repeat(12) { compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick() }
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("10 sets")
+        compose.onNodeWithTag(ComposerTestTags.INCREASE).assertIsNotEnabled()
+
+        compose.onNodeWithTag(ComposerTestTags.TOGGLE).performClick()
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).assertDoesNotExist()
+        compose.onNodeWithTag(ChatTestTags.INPUT).assertIsDisplayed()
+        compose.onNodeWithTag(ComposerTestTags.TOGGLE).performClick()
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).assertIsDisplayed()
     }
 
     private fun fixture(name: String) =

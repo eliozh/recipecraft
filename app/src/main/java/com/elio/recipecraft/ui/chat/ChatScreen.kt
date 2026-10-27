@@ -33,7 +33,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -43,7 +46,11 @@ import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.ui.common.isFixedInSettings
 import com.elio.recipecraft.ui.common.llmErrorText
+import com.elio.recipecraft.domain.GenerationShortfall
+import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.domain.daySets
 import com.elio.recipecraft.ui.recipe.RecipeCard
+import com.elio.recipecraft.ui.recipe.label
 
 @Composable
 fun ChatScreen(
@@ -89,6 +96,15 @@ fun ChatScreen(
             }
         }
         if (state.sending) LinearProgressIndicator(Modifier.fillMaxWidth())
+        GenerationComposer(
+            state = state.composer,
+            sending = state.sending,
+            onScopeChanged = viewModel::onScopeChanged,
+            onCountChanged = viewModel::onCountChanged,
+            onPreferencesChanged = viewModel::onPreferencesChanged,
+            onExpandedChanged = viewModel::onComposerExpandedChanged,
+            onGenerate = viewModel::onGenerate,
+        )
         Composer(
             input = state.input,
             sending = state.sending,
@@ -105,16 +121,62 @@ private fun ChatItem(message: ChatMessage, streaming: Boolean, canRetry: Boolean
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Above the raw text, so Retry stays in view when the list scrolls to this reply.
         if (message.recipeStatus == RecipeStatus.FAILED) RecipeFailed(canRetry, onRetry)
-        // A recipe reply whose prose is empty shows only its cards.
-        if (message.shownText.isNotEmpty() || (streaming && message.recipeStatus == RecipeStatus.NONE)) {
-            MessageBubble(message, streaming)
+        val generation = message.generation
+        if (generation != null) {
+            MessageBubble(message, generationSummary(generation), streaming)
+        } else if (message.shownText.isNotEmpty() || (streaming && message.recipeStatus == RecipeStatus.NONE)) {
+            // A recipe reply whose prose is empty shows only its cards.
+            MessageBubble(message, message.shownText, streaming)
         }
         when (message.recipeStatus) {
             RecipeStatus.BUILDING -> Progress(stringResource(R.string.chat_building_recipes))
             RecipeStatus.REPAIRING -> Progress(stringResource(R.string.chat_repairing_recipes))
             RecipeStatus.FAILED, RecipeStatus.NONE -> Unit
         }
-        message.recipes.forEach { RecipeCard(it) }
+        message.shortfall?.let { ShortfallWarning(it) }
+        Recipes(message.recipes)
+    }
+}
+
+/** Single recipes as a plain list, then each full-day set under its "Day n" header. */
+@Composable
+private fun Recipes(recipes: List<Recipe>) {
+    recipes.filter { it.setId == null }.forEach { RecipeCard(it) }
+    recipes.daySets().forEachIndexed { i, set ->
+        Text(
+            stringResource(R.string.generation_day, i + 1),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .padding(top = 8.dp)
+                .semantics { heading() }
+                .testTag(ChatTestTags.DAY_HEADER),
+        )
+        set.forEach { RecipeCard(it) }
+    }
+}
+
+@Composable
+private fun ShortfallWarning(shortfall: GenerationShortfall) {
+    val separator = stringResource(R.string.list_separator)
+    val lines = buildList {
+        if (shortfall.isShort) {
+            val plural = if (shortfall.sets) R.plurals.generation_short_sets else R.plurals.generation_short_recipes
+            add(pluralStringResource(plural, shortfall.asked, shortfall.asked, shortfall.got))
+        }
+        shortfall.incomplete.forEach { set ->
+            val meals = set.missing.map { stringResource(it.label) }.joinToString(separator)
+            add(stringResource(R.string.generation_incomplete_set, set.day, meals))
+        }
+    }
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+            contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+        ),
+        modifier = Modifier.fillMaxWidth().testTag(ChatTestTags.GENERATION_WARNING),
+    ) {
+        Text(lines.joinToString("\n"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
     }
 }
 
@@ -148,7 +210,7 @@ private fun RecipeFailed(canRetry: Boolean, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage, streaming: Boolean) {
+private fun MessageBubble(message: ChatMessage, text: String, streaming: Boolean) {
     val isUser = message.role == LlmMessage.Role.USER
     Box(Modifier.fillMaxWidth()) {
         Surface(
@@ -160,7 +222,7 @@ private fun MessageBubble(message: ChatMessage, streaming: Boolean) {
                 .testTag(if (isUser) ChatTestTags.USER_MESSAGE else ChatTestTags.ASSISTANT_MESSAGE),
         ) {
             Text(
-                text = message.shownText.ifEmpty { if (streaming) "…" else "" },
+                text = text.ifEmpty { if (streaming) "…" else "" },
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
             )
@@ -228,4 +290,6 @@ object ChatTestTags {
     const val RECIPE_PROGRESS = "chat_recipe_progress"
     const val RECIPE_FAILED = "chat_recipe_failed"
     const val INPUT = "chat_input"
+    const val DAY_HEADER = "chat_day_header"
+    const val GENERATION_WARNING = "chat_generation_warning"
 }

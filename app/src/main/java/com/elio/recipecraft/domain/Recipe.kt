@@ -55,3 +55,10 @@ enum class MealType { BREAKFAST, LUNCH, DINNER, SNACK, DESSERT }
 
 /** The recipes from one reply. */
 data class RecipeBatch(val recipes: List<Recipe>)
+
+/**
+ * The full-day sets among these recipes, in order of first appearance, so the first is Day 1.
+ * Recipes without a [Recipe.setId] are left out.
+ */
+fun List<Recipe>.daySets(): List<List<Recipe>> =
+    filter { it.setId != null }.groupBy { it.setId }.values.toList()

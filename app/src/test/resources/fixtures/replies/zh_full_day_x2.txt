@@ -1,0 +1,233 @@
+这是两天均衡的三餐。
+```json
+{
+  "recipes": [
+    {
+      "name": "小米粥配鸡蛋",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 261,
+      "ingredients": [
+        {
+          "name": "小米",
+          "nameEn": "millet",
+          "quantity": "50",
+          "unit": "克",
+          "grams": 50,
+          "aiKcal": 189
+        },
+        {
+          "name": "鸡蛋",
+          "nameEn": "egg",
+          "quantity": "1",
+          "unit": "个",
+          "grams": 50,
+          "aiKcal": 72
+        }
+      ],
+      "tools": [
+        "锅"
+      ],
+      "steps": [
+        {
+          "text": "小米加水煮成粥。",
+          "minutes": 25
+        },
+        {
+          "text": "鸡蛋煮熟。",
+          "minutes": 8
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "番茄牛肉面",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 388,
+      "ingredients": [
+        {
+          "name": "面条",
+          "nameEn": "noodle",
+          "quantity": "100",
+          "unit": "克",
+          "grams": 100,
+          "aiKcal": 138
+        },
+        {
+          "name": "牛肉",
+          "nameEn": "beef",
+          "quantity": "100",
+          "unit": "克",
+          "grams": 100,
+          "aiKcal": 250
+        }
+      ],
+      "tools": [
+        "锅",
+        "刀"
+      ],
+      "steps": [
+        {
+          "text": "牛肉切片炒熟。",
+          "minutes": 5
+        },
+        {
+          "text": "加番茄和面条煮熟。",
+          "minutes": 10
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "清蒸鲈鱼",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 493,
+      "ingredients": [
+        {
+          "name": "鲈鱼",
+          "nameEn": "sea bass",
+          "quantity": "1",
+          "unit": "条",
+          "grams": 500,
+          "aiKcal": 485
+        },
+        {
+          "name": "姜",
+          "nameEn": "ginger",
+          "quantity": "3",
+          "unit": "片",
+          "grams": 10,
+          "aiKcal": 8
+        }
+      ],
+      "tools": [
+        "蒸锅"
+      ],
+      "steps": [
+        {
+          "text": "鱼身划刀，放姜片。",
+          "minutes": 3
+        },
+        {
+          "text": "大火蒸熟。",
+          "minutes": 10
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "豆浆油条",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 334,
+      "ingredients": [
+        {
+          "name": "豆浆",
+          "nameEn": "soy milk",
+          "quantity": "1",
+          "unit": "杯",
+          "grams": 250,
+          "aiKcal": 100
+        },
+        {
+          "name": "油条",
+          "nameEn": "fried dough stick",
+          "quantity": "1",
+          "unit": "根",
+          "grams": 60,
+          "aiKcal": 234
+        }
+      ],
+      "tools": [
+        "杯子"
+      ],
+      "steps": [
+        {
+          "text": "豆浆加热。",
+          "minutes": 3
+        }
+      ],
+      "set": 2
+    },
+    {
+      "name": "宫保鸡丁",
+      "mealType": "lunch",
+      "servings": 2,
+      "aiKcal": 500,
+      "ingredients": [
+        {
+          "name": "鸡胸肉",
+          "nameEn": "chicken breast",
+          "quantity": "200",
+          "unit": "克",
+          "grams": 200,
+          "aiKcal": 330
+        },
+        {
+          "name": "花生",
+          "nameEn": "peanut",
+          "quantity": "30",
+          "unit": "克",
+          "grams": 30,
+          "aiKcal": 170
+        }
+      ],
+      "tools": [
+        "炒锅",
+        "锅铲"
+      ],
+      "steps": [
+        {
+          "text": "鸡肉切丁腌制。",
+          "minutes": 10
+        },
+        {
+          "text": "与花生、辣椒同炒。",
+          "minutes": 6
+        }
+      ],
+      "set": 2
+    },
+    {
+      "name": "麻婆豆腐",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 360,
+      "ingredients": [
+        {
+          "name": "豆腐",
+          "nameEn": "tofu",
+          "quantity": "300",
+          "unit": "克",
+          "grams": 300,
+          "aiKcal": 228
+        },
+        {
+          "name": "猪肉末",
+          "nameEn": "ground pork",
+          "quantity": "50",
+          "unit": "克",
+          "grams": 50,
+          "aiKcal": 132
+        }
+      ],
+      "tools": [
+        "炒锅"
+      ],
+      "steps": [
+        {
+          "text": "豆腐切块焯水。",
+          "minutes": 3
+        },
+        {
+          "text": "炒香肉末和豆瓣酱，加豆腐烧入味。",
+          "minutes": 8
+        }
+      ],
+      "set": 2
+    }
+  ]
+}
+```

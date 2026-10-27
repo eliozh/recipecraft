@@ -191,4 +191,12 @@ class RecipeParserTest {
         assertEquals(StreamingReply("", hasJson = true), parser.streaming("  {\"reci"))
         assertFalse(parser.streaming(fixture("en_free_text.txt")).hasJson)
     }
+
+    @Test
+    fun `the optional set number is read when present and null when absent`() {
+        val sets = (parser.parse(fixture("en_full_day_x2.txt")) as RecipeParseResult.Success).batch.recipes
+        assertEquals(listOf(1.0, 1.0, 1.0, 2.0, 2.0, 2.0), sets.map { it.set })
+        val single = (parser.parse(fixture("en_breakfast.txt")) as RecipeParseResult.Success).batch.recipes
+        assertNull(single.single().set)
+    }
 }

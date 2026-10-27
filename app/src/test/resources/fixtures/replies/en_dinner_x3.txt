@@ -1,0 +1,115 @@
+Here are three different dinners.
+```json
+{
+  "recipes": [
+    {
+      "name": "Mushroom risotto",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 744,
+      "ingredients": [
+        {
+          "name": "Arborio rice",
+          "nameEn": "arborio rice",
+          "quantity": "1",
+          "unit": "cup",
+          "grams": 200,
+          "aiKcal": 700
+        },
+        {
+          "name": "Mushrooms",
+          "nameEn": "mushroom",
+          "quantity": "200",
+          "unit": "g",
+          "grams": 200,
+          "aiKcal": 44
+        }
+      ],
+      "tools": [
+        "Saucepan",
+        "Ladle"
+      ],
+      "steps": [
+        {
+          "text": "Toast the rice, then add stock a ladle at a time.",
+          "minutes": 20
+        }
+      ]
+    },
+    {
+      "name": "Chicken curry",
+      "mealType": "dinner",
+      "servings": 4,
+      "aiKcal": 1756,
+      "ingredients": [
+        {
+          "name": "Chicken thigh",
+          "nameEn": "chicken thigh",
+          "quantity": "400",
+          "unit": "g",
+          "grams": 400,
+          "aiKcal": 836
+        },
+        {
+          "name": "Coconut milk",
+          "nameEn": "coconut milk",
+          "quantity": "1",
+          "unit": "can",
+          "grams": 400,
+          "aiKcal": 920
+        }
+      ],
+      "tools": [
+        "Pot"
+      ],
+      "steps": [
+        {
+          "text": "Brown the chicken.",
+          "minutes": 8
+        },
+        {
+          "text": "Simmer in coconut milk with curry paste.",
+          "minutes": 20
+        }
+      ]
+    },
+    {
+      "name": "Shrimp tacos",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 637,
+      "ingredients": [
+        {
+          "name": "Shrimp",
+          "nameEn": "shrimp",
+          "quantity": "300",
+          "unit": "g",
+          "grams": 300,
+          "aiKcal": 297
+        },
+        {
+          "name": "Corn tortillas",
+          "nameEn": "corn tortilla",
+          "quantity": "6",
+          "unit": "",
+          "grams": 156,
+          "aiKcal": 340
+        }
+      ],
+      "tools": [
+        "Frying pan"
+      ],
+      "steps": [
+        {
+          "text": "Sear the shrimp.",
+          "minutes": 4
+        },
+        {
+          "text": "Fill the warm tortillas.",
+          "minutes": 2
+        }
+      ]
+    }
+  ]
+}
+```

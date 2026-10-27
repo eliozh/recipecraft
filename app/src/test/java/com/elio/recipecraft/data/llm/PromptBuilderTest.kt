@@ -1,6 +1,8 @@
 package com.elio.recipecraft.data.llm
 
 import com.elio.recipecraft.data.llm.LlmMessage.Role
+import com.elio.recipecraft.domain.GenerationRequest
+import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.testing.FakeLanguageSettings
 import java.io.File
@@ -53,8 +55,13 @@ class PromptBuilderTest {
             language.resolved = lang
             val chat = builder().chat(emptyList(), "x")
             val repair = builder().repair("bad", "the JSON is not valid", lang)
-            listOf(chat.request.system!!, chat.request.messages.single().content, repair.request.messages.single().content)
-                .forEach { assertFalse("$lang: $it", it.contains("{{")) }
+            val generate = builder().generate(emptyList(), GenerationRequest(GenerationScope.FULL_DAY_SET, 2, "vegan"))
+            listOf(
+                chat.request.system!!,
+                chat.request.messages.single().content,
+                repair.request.messages.single().content,
+                generate.request.messages.single().content,
+            ).forEach { assertFalse("$lang: $it", it.contains("{{")) }
         }
     }
 
@@ -84,7 +91,65 @@ class PromptBuilderTest {
         val paths = mutableListOf<String>()
         language.resolved = Language.ZH
         builder { path -> paths += path; "" }.chat(emptyList(), "x")
-        assertEquals(setOf("prompts/zh/generate.md", "prompts/zh/system.md"), paths.toSet())
+        assertEquals(setOf("prompts/zh/chat.md", "prompts/zh/system.md"), paths.toSet())
+
+        paths.clear()
+        language.resolved = Language.EN
+        builder { path -> paths += path; "" }.generate(emptyList(), GenerationRequest(GenerationScope.LUNCH, 1))
+        assertEquals(setOf("prompts/en/generate.md", "prompts/en/system.md"), paths.toSet())
+    }
+
+    @Test
+    fun `a full-day request asks for sets numbered with set, in english`() = runTest {
+        language.resolved = Language.EN
+        val prompt = builder().generate(emptyList(), GenerationRequest(GenerationScope.FULL_DAY_SET, 2))
+
+        assertEquals(Language.EN, prompt.language)
+        val user = prompt.request.messages.single().content
+        assertTrue(user.contains("- Scope: full_day_set\n"))
+        assertTrue(user.contains("- Count: 2\n"))
+        assertTrue(user.contains("- Recipes in total: 6\n"))
+        assertTrue(user.contains("<<<>>>"))
+        assertTrue(user.contains("\"set\""))
+        assertTrue(prompt.request.system!!.contains("\"set\": integer"))
+    }
+
+    @Test
+    fun `a single-meal request carries its meal, count and preferences, in chinese`() = runTest {
+        language.resolved = Language.ZH
+        val prompt = builder().generate(emptyList(), GenerationRequest(GenerationScope.DINNER, 3, "  素食，少油 "))
+
+        assertEquals(Language.ZH, prompt.language)
+        val user = prompt.request.messages.single().content
+        assertTrue(user.contains("- 范围：dinner\n"))
+        assertTrue(user.contains("- 数量：3\n"))
+        assertTrue(user.contains("- 食谱总数：3\n"))
+        assertTrue(user.contains("<<<素食，少油>>>"))
+        assertTrue(prompt.request.system!!.contains("`set`"))
+    }
+
+    @Test
+    fun `every scope and the count reach the prompt`() = runTest {
+        for (lang in Language.entries) {
+            language.resolved = lang
+            for (scope in GenerationScope.entries) {
+                for (count in listOf(1, 10)) {
+                    val request = GenerationRequest(scope, count)
+                    val user = builder().generate(emptyList(), request).request.messages.single().content
+                    assertTrue("$lang $scope", user.contains(scope.name.lowercase()))
+                    assertTrue("$lang $scope $count", Regex("\\b$count\\b").containsMatchIn(user))
+                    assertTrue("$lang $scope total", user.contains("${request.expectedRecipes}\n"))
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a generate turn follows the history`() = runTest {
+        val history = listOf(LlmMessage(Role.USER, "Hi"), LlmMessage(Role.ASSISTANT, "Hello"))
+        val messages = builder().generate(history, GenerationRequest(GenerationScope.SNACK, 2)).request.messages
+        assertEquals(history, messages.take(2))
+        assertEquals(Role.USER, messages.last().role)
     }
 
     @Test
@@ -92,7 +157,7 @@ class PromptBuilderTest {
         val en = File("src/main/assets/prompts/en").list()!!.toSet()
         val zh = File("src/main/assets/prompts/zh").list()!!.toSet()
         assertEquals(en, zh)
-        assertTrue(en.containsAll(listOf("system.md", "generate.md", "repair.md")))
+        assertTrue(en.containsAll(listOf("system.md", "chat.md", "generate.md", "repair.md")))
     }
 
     @Test

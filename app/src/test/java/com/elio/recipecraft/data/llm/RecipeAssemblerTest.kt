@@ -15,6 +15,7 @@ import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecipeAssemblerTest {
@@ -125,5 +126,67 @@ class RecipeAssemblerTest {
 
         val zh = assembler.assemble(RecipeBatchWire(listOf(wire(ingredients = listOf(IngredientWire("燕麦", ""))))), Language.ZH)
         assertEquals("", zh.recipes.single().ingredients.single().nameEn)
+    }
+
+    private fun meal(mealType: String?, set: Double? = null) = wire(mealType = mealType).copy(name = "$mealType $set", set = set)
+
+    private fun assembleSets(grouping: SetGrouping, vararg recipes: RecipeWire) =
+        assembler.assemble(RecipeBatchWire(recipes.toList()), Language.EN, grouping = grouping).recipes
+
+    @Test
+    fun `recipes sharing a set number share one new setId per set, grouped in set order`() {
+        val recipes = assembleSets(
+            SetGrouping.FULL_DAY,
+            meal("breakfast", 2.0), meal("breakfast", 1.0), meal("lunch", 1.0), meal("lunch", 2.0),
+        )
+        assertEquals(listOf("breakfast 1.0", "lunch 1.0", "breakfast 2.0", "lunch 2.0"), recipes.map { it.name })
+        assertEquals(listOf("id-2", "id-2", "id-1", "id-1"), recipes.map { it.setId })
+        // Recipe ids are new ids too, distinct from the set ids.
+        assertEquals(4, recipes.map { it.id }.toSet().size)
+        assertTrue(recipes.none { it.id == it.setId })
+    }
+
+    @Test
+    fun `without set numbers a full-day reply is grouped by meal order`() {
+        val recipes = assembleSets(
+            SetGrouping.FULL_DAY,
+            meal("breakfast"), meal("lunch"), meal("dinner"), meal("snack"),
+            meal("breakfast"), meal("dinner"),
+            meal("lunch"), meal(null), meal("dinner"),
+        )
+        val sets = recipes.map { it.setId }
+        assertEquals(sets.subList(0, 4).distinct().size, 1)
+        assertEquals(sets.subList(4, 6).distinct().size, 1)
+        assertEquals(sets.subList(6, 9).distinct().size, 1)
+        assertEquals(3, sets.distinct().size)
+        assertTrue(sets.none { it == null })
+    }
+
+    @Test
+    fun `partial set numbers fall back to meal order for a full day`() {
+        val recipes = assembleSets(SetGrouping.FULL_DAY, meal("breakfast", 2.0), meal("lunch"), meal("breakfast", 0.0))
+        assertEquals(2, recipes.map { it.setId }.distinct().size)
+        assertEquals(listOf("breakfast 2.0", "lunch null", "breakfast 0.0"), recipes.map { it.name })
+    }
+
+    @Test
+    fun `single-meal requests never get a setId, even with set numbers`() {
+        val recipes = assembleSets(SetGrouping.NONE, meal("dinner", 1.0), meal("dinner", 2.0))
+        assertTrue(recipes.all { it.setId == null })
+        assertEquals(listOf("id-1", "id-2"), recipes.map { it.id })
+    }
+
+    @Test
+    fun `free-form chat groups only fully numbered replies`() {
+        assertTrue(assembleSets(SetGrouping.NUMBERED, meal("breakfast"), meal("lunch")).all { it.setId == null })
+        assertTrue(assembleSets(SetGrouping.NUMBERED, meal("breakfast", 1.0), meal("lunch")).all { it.setId == null })
+        val numbered = assembleSets(SetGrouping.NUMBERED, meal("breakfast", 1.0), meal("lunch", 1.0))
+        assertEquals(1, numbered.map { it.setId }.distinct().size)
+        assertTrue(numbered.all { it.setId != null })
+    }
+
+    @Test
+    fun `an empty batch assembles to nothing`() {
+        assertTrue(assembleSets(SetGrouping.FULL_DAY).isEmpty())
     }
 }

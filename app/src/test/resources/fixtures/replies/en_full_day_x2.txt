@@ -1,0 +1,233 @@
+Here are two balanced days of eating.
+```json
+{
+  "recipes": [
+    {
+      "name": "Greek yogurt parfait",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 188,
+      "ingredients": [
+        {
+          "name": "Greek yogurt",
+          "nameEn": "greek yogurt",
+          "quantity": "1",
+          "unit": "cup",
+          "grams": 245,
+          "aiKcal": 146
+        },
+        {
+          "name": "Blueberries",
+          "nameEn": "blueberry",
+          "quantity": "1/2",
+          "unit": "cup",
+          "grams": 74,
+          "aiKcal": 42
+        }
+      ],
+      "tools": [
+        "Bowl",
+        "Spoon"
+      ],
+      "steps": [
+        {
+          "text": "Layer the yogurt and berries in a bowl.",
+          "minutes": 2
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Chicken salad wrap",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 428,
+      "ingredients": [
+        {
+          "name": "Chicken breast",
+          "nameEn": "chicken breast",
+          "quantity": "150",
+          "unit": "g",
+          "grams": 150,
+          "aiKcal": 248
+        },
+        {
+          "name": "Flour tortilla",
+          "nameEn": "flour tortilla",
+          "quantity": "1",
+          "unit": "",
+          "grams": 60,
+          "aiKcal": 180
+        }
+      ],
+      "tools": [
+        "Knife",
+        "Cutting board"
+      ],
+      "steps": [
+        {
+          "text": "Slice the cooked chicken.",
+          "minutes": 3
+        },
+        {
+          "text": "Fill the tortilla and roll it up.",
+          "minutes": 2
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Salmon with roasted vegetables",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 685,
+      "ingredients": [
+        {
+          "name": "Salmon fillet",
+          "nameEn": "salmon",
+          "quantity": "2",
+          "unit": "fillets",
+          "grams": 300,
+          "aiKcal": 624
+        },
+        {
+          "name": "Broccoli",
+          "nameEn": "broccoli",
+          "quantity": "2",
+          "unit": "cups",
+          "grams": 180,
+          "aiKcal": 61
+        }
+      ],
+      "tools": [
+        "Baking tray",
+        "Oven"
+      ],
+      "steps": [
+        {
+          "text": "Heat the oven to 200 °C.",
+          "minutes": 10
+        },
+        {
+          "text": "Roast the salmon and broccoli.",
+          "minutes": 15
+        }
+      ],
+      "set": 1
+    },
+    {
+      "name": "Peanut butter toast",
+      "mealType": "breakfast",
+      "servings": 1,
+      "aiKcal": 348,
+      "ingredients": [
+        {
+          "name": "Whole wheat bread",
+          "nameEn": "whole wheat bread",
+          "quantity": "2",
+          "unit": "slices",
+          "grams": 64,
+          "aiKcal": 160
+        },
+        {
+          "name": "Peanut butter",
+          "nameEn": "peanut butter",
+          "quantity": "2",
+          "unit": "tbsp",
+          "grams": 32,
+          "aiKcal": 188
+        }
+      ],
+      "tools": [
+        "Toaster",
+        "Knife"
+      ],
+      "steps": [
+        {
+          "text": "Toast the bread and spread the peanut butter.",
+          "minutes": 3
+        }
+      ],
+      "set": 2
+    },
+    {
+      "name": "Lentil soup",
+      "mealType": "lunch",
+      "servings": 4,
+      "aiKcal": 717,
+      "ingredients": [
+        {
+          "name": "Red lentils",
+          "nameEn": "red lentil",
+          "quantity": "1",
+          "unit": "cup",
+          "grams": 192,
+          "aiKcal": 668
+        },
+        {
+          "name": "Carrot",
+          "nameEn": "carrot",
+          "quantity": "2",
+          "unit": "",
+          "grams": 120,
+          "aiKcal": 49
+        }
+      ],
+      "tools": [
+        "Pot",
+        "Wooden spoon"
+      ],
+      "steps": [
+        {
+          "text": "Simmer the lentils and carrots in water.",
+          "minutes": 25
+        },
+        {
+          "text": "Season and blend half of the soup.",
+          "minutes": 3
+        }
+      ],
+      "set": 2
+    },
+    {
+      "name": "Beef stir-fry",
+      "mealType": "dinner",
+      "servings": 2,
+      "aiKcal": 481,
+      "ingredients": [
+        {
+          "name": "Beef sirloin",
+          "nameEn": "beef sirloin",
+          "quantity": "250",
+          "unit": "g",
+          "grams": 250,
+          "aiKcal": 450
+        },
+        {
+          "name": "Bell pepper",
+          "nameEn": "bell pepper",
+          "quantity": "1",
+          "unit": "",
+          "grams": 120,
+          "aiKcal": 31
+        }
+      ],
+      "tools": [
+        "Wok",
+        "Spatula"
+      ],
+      "steps": [
+        {
+          "text": "Slice the beef and the pepper.",
+          "minutes": 5
+        },
+        {
+          "text": "Stir-fry over high heat.",
+          "minutes": 6
+        }
+      ],
+      "set": 2
+    }
+  ]
+}
+```

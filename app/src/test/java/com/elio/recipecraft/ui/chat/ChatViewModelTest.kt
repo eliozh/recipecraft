@@ -10,6 +10,12 @@ import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.domain.CalorieSource
+import com.elio.recipecraft.domain.GenerationRequest
+import com.elio.recipecraft.domain.GenerationScope
+import com.elio.recipecraft.domain.GenerationShortfall
+import com.elio.recipecraft.domain.IncompleteSet
+import com.elio.recipecraft.domain.MealType
+import com.elio.recipecraft.domain.daySets
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.testing.FakeLanguageSettings
 import com.elio.recipecraft.testing.FakeLlmClient
@@ -42,6 +48,7 @@ class ChatViewModelTest {
     private val language = FakeLanguageSettings()
     private val now = Instant.parse("2026-10-27T08:00:00Z")
     private val nutrition = FakeNutritionLookups()
+    private var ids = 0
 
     private fun newViewModel() = ChatViewModel(
         clientFactory = factory,
@@ -51,7 +58,7 @@ class ChatViewModelTest {
             ioDispatcher = UnconfinedTestDispatcher(),
         ),
         parser = RecipeParser(),
-        assembler = RecipeAssembler(Clock.fixed(now, ZoneOffset.UTC)) { "recipe-id" },
+        assembler = RecipeAssembler(Clock.fixed(now, ZoneOffset.UTC)) { "id-${++ids}" },
         nutrition = nutrition,
     )
 
@@ -231,7 +238,7 @@ class ChatViewModelTest {
         assertEquals(text, reply.text)
         val recipe = reply.recipes.single()
         assertEquals("Banana oatmeal with milk", recipe.name)
-        assertEquals("recipe-id", recipe.id)
+        assertEquals("id-1", recipe.id)
         assertEquals(now.toEpochMilli(), recipe.createdAt)
         assertEquals(Language.EN, recipe.language)
         assertEquals(CalorieSource.AI_ESTIMATE, recipe.calories.source)
@@ -362,5 +369,193 @@ class ChatViewModelTest {
         vm.send("Hi")
         vm.onRetry(vm.uiState.value.messages.last().id)
         assertEquals(1, client.requests.size)
+    }
+
+    private fun ChatViewModel.generate(scope: GenerationScope, count: Int, preferences: String = "") {
+        onScopeChanged(scope)
+        onCountChanged(count)
+        onPreferencesChanged(preferences)
+        onGenerate()
+    }
+
+    private val fullDay = listOf(MealType.BREAKFAST, MealType.LUNCH, MealType.DINNER)
+
+    @Test
+    fun `the composer starts at one full-day set and keeps the count between 1 and 10`() = runTest {
+        val vm = newViewModel()
+        assertEquals(ComposerState(), vm.uiState.value.composer)
+        assertEquals(GenerationRequest(GenerationScope.FULL_DAY_SET, 1), vm.uiState.value.composer.toRequest())
+
+        vm.onCountChanged(0)
+        assertEquals(1, vm.uiState.value.composer.count)
+        vm.onCountChanged(11)
+        assertEquals(10, vm.uiState.value.composer.count)
+        vm.onPreferencesChanged("  vegan ")
+        vm.onScopeChanged(GenerationScope.DESSERT)
+        assertEquals(GenerationRequest(GenerationScope.DESSERT, 10, "vegan"), vm.uiState.value.composer.toRequest())
+        vm.onComposerExpandedChanged(false)
+        assertFalse(vm.uiState.value.composer.expanded)
+    }
+
+    @Test
+    fun `full-day set x2 streams into two grouped sets of breakfast, lunch and dinner`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+
+        val sent = client.requests.single().messages.single().content
+        assertTrue(sent.contains("- Scope: full_day_set\n- Count: 2\n"))
+        var state = vm.uiState.value
+        val user = state.messages.first()
+        assertEquals(GenerationRequest(GenerationScope.FULL_DAY_SET, 2), user.generation)
+        assertEquals(sent, user.text)
+        assertEquals("", user.shownText)
+        assertFalse(state.composer.expanded)
+        assertTrue(state.sending)
+
+        reply(fixture("en_full_day_x2.txt"))
+        state = vm.uiState.value
+        val reply = state.messages.last()
+        assertEquals("Here are two balanced days of eating.", reply.shownText)
+        val sets = reply.recipes.daySets()
+        assertEquals(2, sets.size)
+        sets.forEach { set -> assertEquals(fullDay, set.map { it.mealType }) }
+        assertEquals(listOf("Greek yogurt parfait", "Peanut butter toast"), sets.map { it.first().name })
+        assertTrue(sets[0].first().setId != sets[1].first().setId)
+        assertNull(reply.shortfall)
+        assertFalse(state.sending)
+    }
+
+    @Test
+    fun `a chinese full-day reply is grouped the same way`() = runTest {
+        language.resolved = Language.ZH
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+        assertTrue(client.requests.single().messages.single().content.contains("- 范围：full_day_set"))
+        reply(fixture("zh_full_day_x2.txt"))
+
+        val reply = vm.uiState.value.messages.last()
+        val sets = reply.recipes.daySets()
+        assertEquals(listOf("小米粥配鸡蛋", "豆浆油条"), sets.map { it.first().name })
+        sets.forEach { set -> assertEquals(fullDay, set.map { it.mealType }) }
+        assertTrue(reply.recipes.all { it.language == Language.ZH })
+        assertNull(reply.shortfall)
+    }
+
+    @Test
+    fun `dinner x3 yields three distinct dinners outside any set`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.DINNER, 3, "quick")
+        assertTrue(client.requests.single().messages.single().content.contains("<<<quick>>>"))
+        reply(fixture("en_dinner_x3.txt"))
+
+        val recipes = vm.uiState.value.messages.last().recipes
+        assertEquals(3, recipes.size)
+        assertEquals(3, recipes.map { it.name }.toSet().size)
+        assertTrue(recipes.all { it.mealType == MealType.DINNER && it.setId == null })
+        assertNull(vm.uiState.value.messages.last().shortfall)
+    }
+
+    @Test
+    fun `fewer recipes than asked are kept with a warning and no retry`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.DINNER, 4)
+        reply(fixture("en_dinner_x3.txt"))
+
+        val reply = vm.uiState.value.messages.last()
+        assertEquals(3, reply.recipes.size)
+        assertEquals(GenerationShortfall(asked = 4, got = 3, sets = false), reply.shortfall)
+        assertEquals(1, client.requests.size)
+    }
+
+    @Test
+    fun `an incomplete set is reported by day`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+        reply(fixture("en_full_day_short.txt"))
+
+        val reply = vm.uiState.value.messages.last()
+        assertEquals(4, reply.recipes.size)
+        assertEquals(
+            GenerationShortfall(
+                asked = 2,
+                got = 2,
+                sets = true,
+                incomplete = listOf(IncompleteSet(2, listOf(MealType.LUNCH, MealType.DINNER))),
+            ),
+            reply.shortfall,
+        )
+    }
+
+    @Test
+    fun `fewer sets than asked is short`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 3)
+        reply(fixture("en_full_day_x2.txt"))
+        assertEquals(GenerationShortfall(asked = 3, got = 2, sets = true), vm.uiState.value.messages.last().shortfall)
+    }
+
+    @Test
+    fun `free-form recipes stay outside sets and are never checked`() = runTest {
+        val vm = newViewModel()
+        vm.send("Give me a breakfast recipe")
+        reply(fixture("en_breakfast.txt"))
+        val reply = vm.uiState.value.messages.last()
+        assertNull(reply.recipes.single().setId)
+        assertNull(reply.shortfall)
+        assertNull(vm.uiState.value.messages.first().generation)
+    }
+
+    @Test
+    fun `a repaired composer reply is still grouped and checked`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+        reply(fixture("en_malformed.txt"))
+        reply(fixture("en_full_day_x2.txt"))
+
+        assertEquals(2, client.requests.size)
+        val reply = vm.uiState.value.messages.last()
+        assertEquals(2, reply.recipes.daySets().size)
+        assertNull(reply.shortfall)
+    }
+
+    @Test
+    fun `retrying a composer reply resends the composer request`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.LUNCH, 2)
+        client.events.send(LlmEvent.Delta("```json\n{\"recipes\""))
+        vm.onStop()
+
+        vm.onRetry(vm.uiState.value.messages.last().id)
+        assertEquals(2, client.requests.size)
+        assertEquals(client.requests[0].messages, client.requests[1].messages)
+        reply(fixture("en_dinner_x3.txt"))
+        assertEquals(GenerationRequest(GenerationScope.LUNCH, 2), vm.uiState.value.messages.first().generation)
+        assertNull(vm.uiState.value.messages.last().shortfall)
+    }
+
+    @Test
+    fun `generate is ignored while a reply is in progress, and a missing key keeps the composer open`() = runTest {
+        val vm = newViewModel()
+        vm.send("Hi")
+        vm.onGenerate()
+        assertEquals(1, client.requests.size)
+        client.events.send(LlmEvent.Done(null))
+
+        factory.result = LlmClientResult.Unavailable(LlmErrorKind.MissingKey)
+        vm.onGenerate()
+        assertEquals(LlmErrorKind.MissingKey, vm.uiState.value.error)
+        assertTrue(vm.uiState.value.composer.expanded)
+    }
+
+    @Test
+    fun `a later free-form turn sends the composer turn as history`() = runTest {
+        val vm = newViewModel()
+        vm.generate(GenerationScope.SNACK, 1)
+        reply(fixture("en_dinner_x3.txt"))
+        vm.send("Make the first one spicier")
+
+        val history = client.requests.last().messages
+        assertEquals(3, history.size)
+        assertEquals(client.requests.first().messages.single(), history.first())
     }
 }

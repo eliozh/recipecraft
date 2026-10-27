@@ -132,4 +132,35 @@
     <string name="action_import">导入</string>
     <string name="action_delete">删除</string>
     <string name="action_dismiss">关闭</string>
+    <string name="composer_title">生成食谱</string>
+    <string name="composer_show">展开食谱生成器</string>
+    <string name="composer_hide">收起食谱生成器</string>
+    <string name="composer_scope">餐别</string>
+    <string name="composer_scope_full_day">全天套餐</string>
+    <string name="composer_count">数量</string>
+    <plurals name="composer_count_sets">
+        <item quantity="other">%1$d 套</item>
+    </plurals>
+    <plurals name="composer_count_recipes">
+        <item quantity="other">%1$d 道</item>
+    </plurals>
+    <string name="composer_count_decrease">减少</string>
+    <string name="composer_count_increase">增加</string>
+    <string name="composer_preferences">偏好（可选）</string>
+    <string name="composer_preferences_hint">素食、500 千卡以内…</string>
+    <string name="composer_generate">生成</string>
+    <!-- scope, count: "全天套餐 × 2" -->
+    <string name="generation_summary">%1$s × %2$d</string>
+    <!-- summary, preferences -->
+    <string name="generation_summary_preferences">%1$s · %2$s</string>
+    <string name="generation_day">第 %1$d 天</string>
+    <plurals name="generation_short_sets">
+        <item quantity="other">要了 %1$d 套全天套餐，只收到 %2$d 套。</item>
+    </plurals>
+    <plurals name="generation_short_recipes">
+        <item quantity="other">要了 %1$d 道食谱，只收到 %2$d 道。</item>
+    </plurals>
+    <!-- day number, missing meals joined with list_separator -->
+    <string name="generation_incomplete_set">第 %1$d 天缺少%2$s。</string>
+    <string name="list_separator">、</string>
 </resources>
