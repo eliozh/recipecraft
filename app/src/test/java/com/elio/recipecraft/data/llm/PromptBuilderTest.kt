@@ -4,7 +4,9 @@ import com.elio.recipecraft.data.llm.LlmMessage.Role
 import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.testing.FakeLanguageSettings
+import com.elio.recipecraft.testing.testRecipe
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -56,7 +58,9 @@ class PromptBuilderTest {
             val chat = builder().chat(emptyList(), "x")
             val repair = builder().repair("bad", "the JSON is not valid", lang)
             val generate = builder().generate(emptyList(), GenerationRequest(GenerationScope.FULL_DAY_SET, 2, "vegan"))
+            val modify = builder().modify(testRecipe("r", language = lang), "vegan")
             listOf(
+                modify.request.messages.single().content,
                 chat.request.system!!,
                 chat.request.messages.single().content,
                 repair.request.messages.single().content,
@@ -157,7 +161,7 @@ class PromptBuilderTest {
         val en = File("src/main/assets/prompts/en").list()!!.toSet()
         val zh = File("src/main/assets/prompts/zh").list()!!.toSet()
         assertEquals(en, zh)
-        assertTrue(en.containsAll(listOf("system.md", "chat.md", "generate.md", "repair.md", "translate.md")))
+        assertTrue(en.containsAll(listOf("system.md", "chat.md", "generate.md", "repair.md", "translate.md", "modify.md")))
     }
 
     @Test
@@ -171,6 +175,40 @@ class PromptBuilderTest {
         assertTrue(user.startsWith("Translate this recipe from the RecipeCraft app into English."))
         assertTrue(user.contains("<<<\n{\"name\": \"Toast {{x}}\"}\n>>>"))
         assertFalse(user.contains("{{"+"languageName}}"))
+    }
+
+    @Test
+    fun `modify carries the recipe json and the instruction, in english`() = runTest {
+        language.resolved = Language.ZH // The recipe's language picks the template, not the app language.
+        val recipe = testRecipe("r-1", name = "Chicken wrap", mealType = MealType.LUNCH, setId = "set-1")
+        val prompt = builder().modify(recipe, "  Make it vegetarian  ")
+
+        assertEquals(Language.EN, prompt.language)
+        assertTrue(prompt.request.system!!.contains("in English"))
+        val user = prompt.request.messages.single().content
+        assertTrue(user.startsWith("Change this recipe from the RecipeCraft app as the user asks."))
+        assertTrue(user.contains("<<<\n${recipe.toWireJson()}\n>>>"))
+        assertTrue(user.contains("\"name\":\"Chicken wrap\""))
+        assertTrue(user.contains("\"mealType\":\"lunch\""))
+        assertTrue(user.contains("<<<Make it vegetarian>>>"))
+        // The app owns ids and sets; the model never sees them.
+        assertFalse(user.contains("r-1"))
+        assertFalse(user.contains("set-1"))
+    }
+
+    @Test
+    fun `modify carries the recipe json and the instruction, in chinese`() = runTest {
+        language.resolved = Language.EN
+        val recipe = testRecipe("r-2", name = "番茄牛肉面", mealType = MealType.LUNCH, language = Language.ZH)
+        val prompt = builder().modify(recipe, "改成素食")
+
+        assertEquals(Language.ZH, prompt.language)
+        assertTrue(prompt.request.system!!.contains("都用简体中文书写"))
+        val user = prompt.request.messages.single().content
+        assertTrue(user.startsWith("请按用户的要求修改这份来自食谱工坊应用的食谱。"))
+        assertTrue(user.contains("<<<\n${recipe.toWireJson()}\n>>>"))
+        assertTrue(user.contains("\"name\":\"番茄牛肉面\""))
+        assertTrue(user.contains("<<<改成素食>>>"))
     }
 
     @Test

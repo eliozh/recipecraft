@@ -1,10 +1,15 @@
 package com.elio.recipecraft.data.llm
 
+import com.elio.recipecraft.domain.Recipe
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.JsonTransformingSerializer
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /*
  * The `RecipeBatch` JSON the model returns, as the prompts in assets/prompts/{en,zh}/system.md
@@ -75,4 +80,46 @@ data class StepWire(
 internal object TolerantStepSerializer : JsonTransformingSerializer<StepWire>(StepWire.serializer()) {
     override fun transformDeserialize(element: JsonElement): JsonElement =
         if (element is JsonPrimitive && element.isString) JsonObject(mapOf("text" to element)) else element
+}
+
+/**
+ * The recipe in the schema the prompts describe, for prompts that send a recipe to the model
+ * (`translate.md`, `modify.md`). Leaves out the fields the app owns: ids, set, timestamps.
+ */
+internal fun Recipe.toWireJson(): JsonObject = buildJsonObject {
+    put("name", name)
+    put("mealType", mealType?.name?.lowercase())
+    put("servings", servings)
+    put("aiKcal", calories.aiTotal)
+    put(
+        "ingredients",
+        buildJsonArray {
+            ingredients.forEach { ingredient ->
+                add(
+                    buildJsonObject {
+                        put("name", ingredient.name)
+                        put("nameEn", ingredient.nameEn)
+                        put("quantity", ingredient.quantity)
+                        put("unit", ingredient.unit)
+                        put("grams", ingredient.grams)
+                        put("aiKcal", ingredient.aiKcal)
+                    },
+                )
+            }
+        },
+    )
+    put("tools", JsonArray(tools.map(::JsonPrimitive)))
+    put(
+        "steps",
+        buildJsonArray {
+            steps.forEach { step ->
+                add(
+                    buildJsonObject {
+                        put("text", step.text)
+                        put("minutes", step.minutes)
+                    },
+                )
+            }
+        },
+    )
 }

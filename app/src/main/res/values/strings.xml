@@ -235,4 +235,20 @@
     <string name="translate_error_rejected">The AI\'s translation changed more than the text, so it wasn\'t used.</string>
     <string name="translate_error_storage">Couldn\'t read or save your recipes.</string>
     <string name="recipe_translating">Translating…</string>
+    <string name="recipe_modify">Modify with AI</string>
+    <string name="recipe_modified">Modified</string>
+    <string name="recipe_modifying">Modifying…</string>
+    <string name="recipe_save_changes">Save changes</string>
+    <string name="modify_instruction_hint">What should change?</string>
+    <string name="modify_chip_vegetarian">Vegetarian</string>
+    <string name="modify_chip_vegetarian_text">Make it vegetarian</string>
+    <string name="modify_chip_fewer_calories">Fewer calories</string>
+    <string name="modify_chip_fewer_calories_text">Make it lower in calories</string>
+    <string name="modify_chip_no_oven">No oven</string>
+    <string name="modify_chip_no_oven_text">Cook it without an oven</string>
+    <string name="modify_chip_swap">Swap an ingredient</string>
+    <string name="modify_chip_swap_text">Swap one ingredient for another</string>
+    <!-- Joins a quick chip's text to what is already typed -->
+    <string name="modify_instruction_separator">"; "</string>
+    <string name="modify_error_rejected">The AI\'s reply wasn\'t a usable recipe, so nothing changed.</string>
 </resources>

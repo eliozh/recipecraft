@@ -8,6 +8,8 @@ import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.data.llm.LlmMessage.Role
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.ModifyError
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.CalorieSource
@@ -18,16 +20,17 @@ import com.elio.recipecraft.domain.IncompleteSet
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.daySets
 import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.recipe.SaveState
 import com.elio.recipecraft.testing.FakeLanguageSettings
 import com.elio.recipecraft.testing.FakeLlmClient
 import com.elio.recipecraft.testing.FakeLlmClientFactory
 import com.elio.recipecraft.testing.FakeNutritionLookups
 import com.elio.recipecraft.testing.FakeRecipeDao
+import com.elio.recipecraft.testing.MutableClock
 import com.elio.recipecraft.testing.oatmealUsdaLookup
 import java.io.File
-import java.time.Clock
 import java.time.Instant
-import java.time.ZoneOffset
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -54,17 +57,22 @@ class ChatViewModelTest {
     private val recipes = RecipeRepository(recipeDao, nutrition, UnconfinedTestDispatcher())
     private var ids = 0
 
+    private val clock = MutableClock(now)
+    private val promptBuilder = PromptBuilder(
+        assets = { path -> File("src/main/assets/$path").readText() },
+        languageSettings = language,
+        ioDispatcher = UnconfinedTestDispatcher(),
+    )
+    private val assembler = RecipeAssembler(clock) { "id-${++ids}" }
+
     private fun newViewModel() = ChatViewModel(
         clientFactory = factory,
-        promptBuilder = PromptBuilder(
-            assets = { path -> File("src/main/assets/$path").readText() },
-            languageSettings = language,
-            ioDispatcher = UnconfinedTestDispatcher(),
-        ),
+        promptBuilder = promptBuilder,
         parser = RecipeParser(),
-        assembler = RecipeAssembler(Clock.fixed(now, ZoneOffset.UTC)) { "id-${++ids}" },
+        assembler = assembler,
         nutrition = nutrition,
         recipes = recipes,
+        recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, clock),
     )
 
     private fun fixture(name: String) =
@@ -610,5 +618,206 @@ class ChatViewModelTest {
 
         vm.onSaveFailedDismissed()
         assertFalse(vm.uiState.value.saveFailed)
+    }
+
+    /** A chat with two full-day sets from en_full_day_x2.txt; returns the model's reply message. */
+    private suspend fun twoDays(vm: ChatViewModel): ChatMessage {
+        vm.generate(GenerationScope.FULL_DAY_SET, 2)
+        reply(fixture("en_full_day_x2.txt"))
+        return vm.uiState.value.messages.last()
+    }
+
+    private fun ChatViewModel.modify(message: ChatMessage, recipe: Recipe, instruction: String) {
+        onModify(message.id, recipe.id)
+        onModifyInstructionChanged(instruction)
+        onModifySend()
+    }
+
+    private fun ChatViewModel.recipesOf(message: ChatMessage) =
+        uiState.value.messages.first { it.id == message.id }.recipes
+
+    @Test
+    fun `changing the lunch of a set changes only the lunch`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val before = message.recipes
+        val lunch = before.first { it.mealType == MealType.LUNCH }
+        clock.instant = now.plusSeconds(60)
+
+        vm.onModify(message.id, lunch.id)
+        assertEquals(ModifyState(message.id, lunch.id), vm.uiState.value.modify)
+        vm.onModifyInstructionChanged("Make it vegetarian")
+        vm.onModifySend()
+        assertTrue(vm.uiState.value.isModifying(lunch.id))
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+
+        val after = vm.recipesOf(message)
+        val changed = after.first { it.id == lunch.id }
+        assertEquals("Chickpea salad wrap", changed.name)
+        assertEquals(lunch.setId, changed.setId)
+        assertEquals(lunch.language, changed.language)
+        assertEquals(now.plusSeconds(60).toEpochMilli(), changed.updatedAt)
+        // Same place, same ids; every other recipe of both sets is exactly as it was.
+        assertEquals(before.map { it.id }, after.map { it.id })
+        assertEquals(before.filter { it.id != lunch.id }, after.filter { it.id != lunch.id })
+        val state = vm.uiState.value
+        assertNull(state.modify)
+        assertTrue(state.isModified(lunch.id))
+        assertFalse(state.isModifying(lunch.id))
+        assertTrue(before.filter { it.id != lunch.id }.none { state.isModified(it.id) })
+        // The request carried the lunch and the instruction.
+        val user = client.requests.last().messages.single().content
+        assertTrue(user.contains("\"name\":\"${lunch.name}\""))
+        assertTrue(user.contains("<<<Make it vegetarian>>>"))
+    }
+
+    @Test
+    fun `undo puts back each earlier version in turn`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+        val vegetarian = vm.recipesOf(message).first { it.id == lunch.id }
+        vm.modify(message, vegetarian, "Fewer calories")
+        reply(fixture("modify_en_two_recipes.txt"))
+        assertEquals("Light chicken lettuce wrap", vm.recipesOf(message).first { it.id == lunch.id }.name)
+
+        vm.onUndoModify(message.id, lunch.id)
+        assertEquals(vegetarian, vm.recipesOf(message).first { it.id == lunch.id })
+        assertTrue(vm.uiState.value.isModified(lunch.id))
+
+        vm.onUndoModify(message.id, lunch.id)
+        assertEquals(message.recipes, vm.recipesOf(message))
+        assertFalse(vm.uiState.value.isModified(lunch.id))
+
+        vm.onUndoModify(message.id, lunch.id) // nothing left to undo
+        assertEquals(message.recipes, vm.recipesOf(message))
+    }
+
+    @Test
+    fun `a failed change leaves the card as it was and keeps the sheet open with the error`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply("Sorry, I can't do that.")
+        reply(fixture("modify_en_invalid.txt"))
+
+        assertEquals(message.recipes, vm.recipesOf(message))
+        assertEquals(
+            ModifyState(message.id, lunch.id, "Make it vegetarian", running = false, error = ModifyError.Rejected),
+            vm.uiState.value.modify,
+        )
+        assertFalse(vm.uiState.value.isModified(lunch.id))
+
+        // Sending again clears the error and can succeed.
+        vm.onModifySend()
+        assertNull(vm.uiState.value.modify?.error)
+        client.events.send(LlmEvent.Error(LlmErrorKind.Network))
+        assertEquals(ModifyError.Llm(LlmErrorKind.Network), vm.uiState.value.modify?.error)
+        assertEquals(message.recipes, vm.recipesOf(message))
+    }
+
+    @Test
+    fun `cancel stops a running change and leaves the card as it was`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val (breakfast, lunch) = message.recipes
+        client.cancelled = false
+        vm.modify(message, lunch, "Make it vegetarian")
+        client.events.send(LlmEvent.Delta("Here is"))
+
+        // While it runs, no other change starts.
+        vm.onModify(message.id, breakfast.id)
+        assertEquals(lunch.id, vm.uiState.value.modify?.recipeId)
+
+        vm.onModifyCancel()
+        assertTrue(client.cancelled)
+        assertNull(vm.uiState.value.modify)
+        assertEquals(message.recipes, vm.recipesOf(message))
+        assertFalse(vm.uiState.value.isModified(lunch.id))
+    }
+
+    @Test
+    fun `send needs an instruction and an open sheet on a card that exists`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        vm.onModifySend() // no sheet
+        vm.onModify(message.id, message.recipes.first().id)
+        vm.onModifyInstructionChanged("   ")
+        assertFalse(vm.uiState.value.modify!!.canSend)
+        vm.onModifySend()
+        vm.onModify(message.id, "no-such-recipe")
+        vm.onModifyInstructionChanged("Vegetarian")
+        vm.onModifySend()
+
+        assertEquals(1, client.requests.size) // only the generation
+        assertFalse(vm.uiState.value.modify!!.running)
+    }
+
+    @Test
+    fun `a saved card that changes offers save changes, which replaces the saved copy`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+        assertEquals(SaveState.UNSAVED, vm.uiState.value.saveState(lunch))
+        vm.onSave(lunch)
+        assertEquals(SaveState.SAVED, vm.uiState.value.saveState(lunch))
+
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+        val changed = vm.recipesOf(message).first { it.id == lunch.id }
+        assertEquals(SaveState.CHANGED, vm.uiState.value.saveState(changed))
+        assertEquals(lunch.name, recipeDao.recipes.single().name) // nothing saved behind the user's back
+
+        // Undo back to the saved version: Saved again.
+        vm.onUndoModify(message.id, lunch.id)
+        assertEquals(SaveState.SAVED, vm.uiState.value.saveState(vm.recipesOf(message).first { it.id == lunch.id }))
+
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+        val again = vm.recipesOf(message).first { it.id == lunch.id }
+        vm.onSave(again)
+        assertEquals(SaveState.SAVED, vm.uiState.value.saveState(again))
+        assertEquals(listOf(lunch.id), recipeDao.recipes.map { it.id })
+        assertEquals("Chickpea salad wrap", recipeDao.recipes.single().name)
+
+        // Undo now goes back to content that differs from the saved copy.
+        vm.onUndoModify(message.id, lunch.id)
+        assertEquals(SaveState.CHANGED, vm.uiState.value.saveState(vm.recipesOf(message).first { it.id == lunch.id }))
+    }
+
+    @Test
+    fun `a changed card that was never saved still offers save`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+
+        val changed = vm.recipesOf(message).first { it.id == lunch.id }
+        assertEquals(SaveState.UNSAVED, vm.uiState.value.saveState(changed))
+        vm.onSave(changed)
+        assertEquals("Chickpea salad wrap", recipeDao.recipes.single().name)
+        assertEquals(SaveState.SAVED, vm.uiState.value.saveState(changed))
+    }
+
+    @Test
+    fun `a failed save does not count as the saved version`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val lunch = message.recipes.first { it.mealType == MealType.LUNCH }
+        vm.onSave(lunch)
+        vm.modify(message, lunch, "Make it vegetarian")
+        reply(fixture("modify_en_lunch_vegetarian.txt"))
+        val changed = vm.recipesOf(message).first { it.id == lunch.id }
+
+        recipeDao.failWrites = true
+        vm.onSave(changed)
+
+        assertTrue(vm.uiState.value.saveFailed)
+        assertEquals(SaveState.CHANGED, vm.uiState.value.saveState(changed))
     }
 }

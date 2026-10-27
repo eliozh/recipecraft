@@ -6,12 +6,6 @@ import java.time.Clock
 import javax.inject.Inject
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.takeWhile
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 /** Why a recipe could not be translated; the recipe is left as it was. */
 sealed interface TranslationError {
@@ -43,7 +37,7 @@ class RecipeTranslator @Inject constructor(
 ) {
 
     suspend fun translate(recipe: Recipe, target: Language, client: LlmClient): TranslationResult {
-        val prompt = promptBuilder.translate(toJson(recipe).toString(), target)
+        val prompt = promptBuilder.translate(recipe.toWireJson().toString(), target)
         val reply = StringBuilder()
         var error: LlmErrorKind? = null
         client.stream(prompt.request)
@@ -67,46 +61,5 @@ class RecipeTranslator @Inject constructor(
         val translated = RecipeTranslation.merge(recipe, wire, target, clock.millis())
             ?: return TranslationResult.Failure(TranslationError.Rejected)
         return TranslationResult.Success(translated)
-    }
-
-    internal companion object {
-        /** The recipe in the schema the prompts describe, without the fields the app owns (ids, timestamps). */
-        fun toJson(recipe: Recipe): JsonObject = buildJsonObject {
-            put("name", recipe.name)
-            put("mealType", recipe.mealType?.name?.lowercase())
-            put("servings", recipe.servings)
-            put("aiKcal", recipe.calories.aiTotal)
-            put(
-                "ingredients",
-                buildJsonArray {
-                    recipe.ingredients.forEach { ingredient ->
-                        add(
-                            buildJsonObject {
-                                put("name", ingredient.name)
-                                put("nameEn", ingredient.nameEn)
-                                put("quantity", ingredient.quantity)
-                                put("unit", ingredient.unit)
-                                put("grams", ingredient.grams)
-                                put("aiKcal", ingredient.aiKcal)
-                            },
-                        )
-                    }
-                },
-            )
-            put("tools", JsonArray(recipe.tools.map(::JsonPrimitive)))
-            put(
-                "steps",
-                buildJsonArray {
-                    recipe.steps.forEach { step ->
-                        add(
-                            buildJsonObject {
-                                put("text", step.text)
-                                put("minutes", step.minutes)
-                            },
-                        )
-                    }
-                },
-            )
-        }
     }
 }

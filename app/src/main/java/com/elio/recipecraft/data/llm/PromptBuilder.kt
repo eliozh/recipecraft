@@ -5,6 +5,7 @@ import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.di.IoDispatcher
 import com.elio.recipecraft.domain.GenerationRequest
 import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.Recipe
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
@@ -68,6 +69,17 @@ class PromptBuilder @Inject constructor(
     suspend fun translate(recipeJson: String, target: Language): Prompt {
         val user = template(target, "translate", mapOf("recipe" to recipeJson))
         return Prompt(LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, user))), target)
+    }
+
+    /**
+     * Asks the model to change [recipe] as [instruction] says, through `modify.md`. It is written
+     * in the recipe's own language, which the result keeps, whatever the app language is now.
+     */
+    suspend fun modify(recipe: Recipe, instruction: String): Prompt {
+        val language = recipe.language
+        val values = mapOf("recipe" to recipe.toWireJson().toString(), "instruction" to instruction.trim())
+        val user = template(language, "modify", values)
+        return Prompt(LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, user)), system(language)), language)
     }
 
     private suspend fun system(language: Language) = template(language, "system", emptyMap())

@@ -29,6 +29,7 @@ import com.elio.recipecraft.data.llm.LlmRequest
 import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
@@ -80,16 +81,20 @@ class SaveToLibraryTest {
             override fun stream(request: LlmRequest): Flow<LlmEvent> = events.receiveAsFlow()
             override suspend fun listModels() = ModelListResult.Success(emptyList())
         }
+        val factory = object : LlmClientFactory {
+            override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Ready(client)
+            override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = LlmClientResult.Ready(client)
+        }
+        val promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO)
+        val assembler = RecipeAssembler(Clock.systemUTC())
         val chat = ChatViewModel(
-            clientFactory = object : LlmClientFactory {
-                override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Ready(client)
-                override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = LlmClientResult.Ready(client)
-            },
-            promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO),
+            clientFactory = factory,
+            promptBuilder = promptBuilder,
             parser = RecipeParser(),
-            assembler = RecipeAssembler(Clock.systemUTC()),
+            assembler = assembler,
             nutrition = noTables,
             recipes = repository,
+            recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, noTables, Clock.systemUTC()),
         )
         val library = LibraryViewModel(repository, UndoDelete())
         compose.setContent {

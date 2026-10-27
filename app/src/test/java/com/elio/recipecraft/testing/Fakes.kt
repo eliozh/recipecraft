@@ -29,6 +29,10 @@ import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
 import java.security.GeneralSecurityException
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
@@ -265,3 +269,10 @@ fun oatmealUsdaLookup(): NutritionLookup = TableLookup(
         ),
     ),
 )
+
+/** A UTC clock the test moves with [instant]. */
+class MutableClock(var instant: Instant) : Clock() {
+    override fun instant(): Instant = instant
+    override fun getZone(): ZoneId = ZoneOffset.UTC
+    override fun withZone(zone: ZoneId): Clock = this
+}

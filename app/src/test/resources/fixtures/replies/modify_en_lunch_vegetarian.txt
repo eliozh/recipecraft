@@ -1,0 +1,22 @@
+Here is the wrap made vegetarian, with chickpeas instead of chicken.
+```json
+{
+  "recipes": [
+    {
+      "name": "Chickpea salad wrap",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 389,
+      "ingredients": [
+        { "name": "Chickpeas", "nameEn": "chickpea", "quantity": "150", "unit": "g", "grams": 150, "aiKcal": 246 },
+        { "name": "Whole wheat tortilla", "nameEn": "whole wheat tortilla", "quantity": "1", "unit": "", "grams": 50, "aiKcal": 143 }
+      ],
+      "tools": ["Bowl", "Fork"],
+      "steps": [
+        { "text": "Mash the chickpeas lightly with a fork.", "minutes": 3 },
+        { "text": "Spread them on the tortilla and roll it up.", "minutes": 2 }
+      ]
+    }
+  ]
+}
+```

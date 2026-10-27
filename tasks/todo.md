@@ -16,7 +16,7 @@
 - [x] T10 Save recipes and browse the library (filter, search; after T8)
 - [x] T11 Recipe detail screen and delete with undo
 - [x] T12 Translate recipes when the language changes
-- [ ] T13 Change one recipe in the chat
+- [x] T13 Change one recipe in the chat
 - [ ] T14 Change a saved recipe from its detail screen (replace or save as copy)
 - [ ] T15 Preset prompt chips and chat history that persists
 - [ ] Checkpoint B: full flow end to end including translation and CSV calorie matching; human review

@@ -9,9 +9,12 @@ import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmEvent
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.data.llm.LlmRequest
+import com.elio.recipecraft.data.llm.ModifyError
+import com.elio.recipecraft.data.llm.ModifyResult
 import com.elio.recipecraft.data.llm.Prompt
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.SetGrouping
@@ -22,6 +25,7 @@ import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.GenerationShortfall
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.recipe.SaveState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -74,6 +78,19 @@ data class ComposerState(
     fun toRequest() = GenerationRequest(scope, count, preferences.trim())
 }
 
+/** The Modify with AI sheet, open on the recipe [recipeId] of the reply [messageId]. */
+data class ModifyState(
+    val messageId: Long,
+    val recipeId: String,
+    val instruction: String = "",
+    /** True while the model works on the change; the card shows progress and Cancel stops it. */
+    val running: Boolean = false,
+    /** Why the last attempt failed; the card was left as it was. */
+    val error: ModifyError? = null,
+) {
+    val canSend: Boolean get() = !running && instruction.isNotBlank()
+}
+
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val input: String = "",
@@ -87,8 +104,29 @@ data class ChatUiState(
     val savedIds: Set<String> = emptySet(),
     /** The last save did not reach the database. */
     val saveFailed: Boolean = false,
+    /** The open Modify with AI sheet, or null. */
+    val modify: ModifyState? = null,
+    /** The earlier versions of each changed recipe, by id, the latest last, so Undo can go back one at a time. */
+    val history: Map<String, List<Recipe>> = emptyMap(),
+    /** Each recipe as this chat last saved it, by id, so a card changed since shows Save changes. */
+    val savedVersions: Map<String, Recipe> = emptyMap(),
 ) {
     val canSend: Boolean get() = !sending && input.isNotBlank()
+
+    fun isModified(recipeId: String): Boolean = history[recipeId].orEmpty().isNotEmpty()
+
+    fun isModifying(recipeId: String): Boolean = modify?.running == true && modify.recipeId == recipeId
+
+    fun saveState(recipe: Recipe): SaveState {
+        if (recipe.id !in savedIds) return SaveState.UNSAVED
+        val saved = savedVersions[recipe.id]
+        return if (saved == null || saved.sameContent(recipe)) SaveState.SAVED else SaveState.CHANGED
+    }
+
+    private companion object {
+        /** Calories are worked out again on saving, and updatedAt moves with every change, so neither counts. */
+        fun Recipe.sameContent(other: Recipe) = copy(calories = other.calories, updatedAt = other.updatedAt) == other
+    }
 }
 
 /** A free-form chat kept in memory; persistence comes with the chat history task. */
@@ -100,6 +138,7 @@ class ChatViewModel @Inject constructor(
     private val assembler: RecipeAssembler,
     private val nutrition: NutritionLookups,
     private val recipes: RecipeRepository,
+    private val recipeModifier: RecipeModifier,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState())
@@ -107,6 +146,7 @@ class ChatViewModel @Inject constructor(
 
     private var nextId = 0L
     private var replyJob: Job? = null
+    private var modifyJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -203,9 +243,76 @@ class ChatViewModel @Inject constructor(
             } catch (_: RuntimeException) {
                 true
             }
-            _uiState.update { it.copy(saveFailed = failed) }
+            _uiState.update { state ->
+                state.copy(
+                    saveFailed = failed,
+                    savedVersions = if (failed) state.savedVersions else state.savedVersions + toSave.associateBy { it.id },
+                )
+            }
         }
     }
+
+    /** Opens the Modify with AI sheet on the recipe [recipeId] of the reply [messageId]; not while a change runs. */
+    fun onModify(messageId: Long, recipeId: String) {
+        if (_uiState.value.modify?.running == true) return
+        _uiState.update { it.copy(modify = ModifyState(messageId, recipeId)) }
+    }
+
+    fun onModifyInstructionChanged(text: String) {
+        _uiState.update { state -> state.copy(modify = state.modify?.copy(instruction = text)) }
+    }
+
+    /** Sends the instruction; a good reply replaces only that card, and a failure leaves it as it was. */
+    fun onModifySend() {
+        val modify = _uiState.value.modify ?: return
+        val recipe = recipe(modify.messageId, modify.recipeId)
+        if (!modify.canSend || recipe == null) return
+        _uiState.update { it.copy(modify = modify.copy(running = true, error = null)) }
+        modifyJob = viewModelScope.launch {
+            when (val result = recipeModifier.modify(recipe, modify.instruction)) {
+                is ModifyResult.Success -> _uiState.update { state ->
+                    state.replaceRecipe(modify.messageId, result.recipe).copy(
+                        modify = null,
+                        history = state.history + (recipe.id to state.history[recipe.id].orEmpty() + recipe),
+                    )
+                }
+                is ModifyResult.Failure -> _uiState.update { state ->
+                    state.copy(modify = state.modify?.copy(running = false, error = result.error))
+                }
+            }
+        }
+    }
+
+    /** Closes the sheet, stopping a change that is still running; the card stays as it was. */
+    fun onModifyCancel() {
+        modifyJob?.cancel()
+        modifyJob = null
+        _uiState.update { it.copy(modify = null) }
+    }
+
+    /** Puts back the version of the recipe [recipeId] from before its last change. */
+    fun onUndoModify(messageId: Long, recipeId: String) {
+        val state = _uiState.value
+        val previous = state.history[recipeId]?.lastOrNull()
+        if (previous == null || state.isModifying(recipeId)) return
+        _uiState.update {
+            it.replaceRecipe(messageId, previous).copy(history = it.history + (recipeId to it.history.getValue(recipeId).dropLast(1)))
+        }
+    }
+
+    private fun recipe(messageId: Long, recipeId: String) =
+        message(messageId)?.recipes?.firstOrNull { it.id == recipeId }
+
+    /** [recipe] in place of the recipe with its id in the reply [messageId]; the other recipes stay as they are. */
+    private fun ChatUiState.replaceRecipe(messageId: Long, recipe: Recipe) = copy(
+        messages = messages.map { message ->
+            if (message.id != messageId) {
+                message
+            } else {
+                message.copy(recipes = message.recipes.map { if (it.id == recipe.id) recipe else it })
+            }
+        },
+    )
 
     /** Cancelling the collector cancels the HTTP call; the partial reply stays visible. */
     fun onStop() {

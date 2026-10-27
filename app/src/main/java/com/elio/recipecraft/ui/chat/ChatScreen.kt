@@ -88,9 +88,13 @@ fun ChatScreen(
                         streaming = message.id == state.streamingMessageId,
                         canRetry = !state.sending,
                         onRetry = { viewModel.onRetry(message.id) },
-                        savedIds = state.savedIds,
-                        onSave = viewModel::onSave,
-                        onSaveAll = viewModel::onSaveAll,
+                        cards = CardActions(
+                            state = state,
+                            onSave = viewModel::onSave,
+                            onSaveAll = viewModel::onSaveAll,
+                            onModify = { recipe -> viewModel.onModify(message.id, recipe.id) },
+                            onUndo = { recipe -> viewModel.onUndoModify(message.id, recipe.id) },
+                        ),
                     )
                 }
                 if (state.saveFailed) {
@@ -111,6 +115,18 @@ fun ChatScreen(
             onExpandedChanged = viewModel::onComposerExpandedChanged,
             onGenerate = viewModel::onGenerate,
         )
+        state.modify?.let { modify ->
+            ModifySheet(
+                recipeName = state.messages.firstOrNull { it.id == modify.messageId }
+                    ?.recipes?.firstOrNull { it.id == modify.recipeId }?.name.orEmpty(),
+                instruction = modify.instruction,
+                running = modify.running,
+                error = modify.error,
+                onInstructionChanged = viewModel::onModifyInstructionChanged,
+                onSend = viewModel::onModifySend,
+                onCancel = viewModel::onModifyCancel,
+            )
+        }
         Composer(
             input = state.input,
             sending = state.sending,
@@ -128,9 +144,7 @@ private fun ChatItem(
     streaming: Boolean,
     canRetry: Boolean,
     onRetry: () -> Unit,
-    savedIds: Set<String>,
-    onSave: (Recipe) -> Unit,
-    onSaveAll: (List<Recipe>) -> Unit,
+    cards: CardActions,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         // Above the raw text, so Retry stays in view when the list scrolls to this reply.
@@ -148,22 +162,39 @@ private fun ChatItem(
             RecipeStatus.FAILED, RecipeStatus.NONE -> Unit
         }
         message.shortfall?.let { ShortfallWarning(it) }
-        Recipes(message.recipes, savedIds, onSave, onSaveAll)
+        Recipes(message.recipes, cards)
     }
 }
 
+/** What the recipe cards of a reply show and do. */
+private class CardActions(
+    val state: ChatUiState,
+    val onSave: (Recipe) -> Unit,
+    val onSaveAll: (List<Recipe>) -> Unit,
+    val onModify: (Recipe) -> Unit,
+    val onUndo: (Recipe) -> Unit,
+)
+
 /** Single recipes as a plain list, then each full-day set under its "Day n" header with Save all. */
 @Composable
-private fun Recipes(
-    recipes: List<Recipe>,
-    savedIds: Set<String>,
-    onSave: (Recipe) -> Unit,
-    onSaveAll: (List<Recipe>) -> Unit,
-) {
-    @Composable
-    fun SaveableCard(recipe: Recipe) = RecipeCard(recipe, saved = recipe.id in savedIds, onSave = { onSave(recipe) })
+private fun Recipes(recipes: List<Recipe>, cards: CardActions) {
+    val state = cards.state
 
-    recipes.filter { it.setId == null }.forEach { SaveableCard(it) }
+    @Composable
+    fun ActionCard(recipe: Recipe) {
+        val modified = state.isModified(recipe.id)
+        RecipeCard(
+            recipe,
+            saveState = state.saveState(recipe),
+            onSave = { cards.onSave(recipe) },
+            modified = modified,
+            busy = state.isModifying(recipe.id),
+            onModify = { cards.onModify(recipe) },
+            onUndo = if (modified) ({ cards.onUndo(recipe) }) else null,
+        )
+    }
+
+    recipes.filter { it.setId == null }.forEach { ActionCard(it) }
     recipes.daySets().forEachIndexed { i, set ->
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -178,16 +209,16 @@ private fun Recipes(
                     .semantics { heading() }
                     .testTag(ChatTestTags.DAY_HEADER),
             )
-            val allSaved = set.all { it.id in savedIds }
+            val allSaved = set.all { it.id in state.savedIds }
             TextButton(
-                onClick = { onSaveAll(set) },
-                enabled = !allSaved,
+                onClick = { cards.onSaveAll(set) },
+                enabled = !allSaved && set.none { state.isModifying(it.id) },
                 modifier = Modifier.testTag(ChatTestTags.SAVE_ALL),
             ) {
                 Text(stringResource(if (allSaved) R.string.recipe_all_saved else R.string.recipe_save_all))
             }
         }
-        set.forEach { SaveableCard(it) }
+        set.forEach { ActionCard(it) }
     }
 }
 

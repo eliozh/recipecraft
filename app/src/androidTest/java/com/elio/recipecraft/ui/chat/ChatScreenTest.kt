@@ -1,6 +1,9 @@
 package com.elio.recipecraft.ui.chat
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -27,6 +30,7 @@ import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.llm.AndroidAssetReader
 import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
@@ -73,13 +77,17 @@ class ChatScreenTest {
             override suspend fun current() = emptyList<NutritionLookup>()
             override fun observe() = flowOf(emptyList<NutritionLookup>())
         }
+        val factory = FixedFactory(result)
+        val promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO)
+        val assembler = RecipeAssembler(Clock.systemUTC())
         val viewModel = ChatViewModel(
-            clientFactory = FixedFactory(result),
-            promptBuilder = PromptBuilder(AndroidAssetReader(context), EnglishSettings, Dispatchers.IO),
+            clientFactory = factory,
+            promptBuilder = promptBuilder,
             parser = RecipeParser(),
-            assembler = RecipeAssembler(Clock.systemUTC()),
+            assembler = assembler,
             nutrition = nutrition,
             recipes = RecipeRepository(database.recipes(), nutrition, Dispatchers.IO),
+            recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, Clock.systemUTC()),
         )
         compose.setContent {
             RecipeCraftTheme {
@@ -226,6 +234,72 @@ class ChatScreenTest {
         compose.onNodeWithTag(ChatTestTags.INPUT).assertIsDisplayed()
         compose.onNodeWithTag(ComposerTestTags.TOGGLE).performClick()
         compose.onNodeWithTag(ComposerTestTags.GENERATE).assertIsDisplayed()
+    }
+
+    @Test
+    fun modifyingTheLunchOfASetChangesOnlyThatCardAndUndoPutsItBack() {
+        setContent()
+        compose.onNodeWithText(context.getString(R.string.composer_scope_full_day)).performClick()
+        compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick()
+        compose.onNodeWithTag(ComposerTestTags.GENERATE).performClick()
+        compose.waitUntil(5_000) { client.requests.isNotEmpty() }
+        client.events.trySend(LlmEvent.Delta(fixture("en_full_day_x2.txt")))
+        client.events.trySend(LlmEvent.Done(null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecipeCardTestTags.CARD).fetchSemanticsNodes().size == 6 }
+        val others = listOf("Greek yogurt parfait", "Salmon with roasted vegetables", "Peanut butter toast", "Lentil soup", "Beef stir-fry")
+
+        // Day 1 is breakfast, lunch, dinner, so the second card is the lunch.
+        compose.onAllNodesWithTag(RecipeCardTestTags.MODIFY)[1].performScrollTo().performClick()
+        compose.onNodeWithTag(ModifySheetTestTags.SHEET).assertIsDisplayed()
+        compose.onNodeWithTag(ModifySheetTestTags.SEND).assertIsNotEnabled()
+        compose.onNodeWithText(context.getString(R.string.modify_chip_vegetarian)).performClick()
+        compose.onNodeWithTag(ModifySheetTestTags.INSTRUCTION).assertTextContains("Make it vegetarian")
+        compose.onNodeWithTag(ModifySheetTestTags.SEND).performClick()
+
+        compose.waitUntil(5_000) { client.requests.size == 2 }
+        assertTrue(client.requests.last().messages.single().content.contains("\"name\":\"Chicken salad wrap\""))
+        assertTrue(client.requests.last().messages.single().content.contains("<<<Make it vegetarian>>>"))
+        compose.onNodeWithTag(RecipeCardTestTags.MODIFYING).assertExists()
+        client.events.trySend(LlmEvent.Delta(fixture("modify_en_lunch_vegetarian.txt")))
+        client.events.trySend(LlmEvent.Done(null))
+
+        waitForText("Chickpea salad wrap")
+        compose.onNodeWithTag(ModifySheetTestTags.SHEET).assertDoesNotExist()
+        compose.onNodeWithText("Chicken salad wrap").assertDoesNotExist()
+        others.forEach { compose.onNodeWithText(it).assertExists() }
+        compose.onAllNodesWithTag(RecipeCardTestTags.CARD).assertCountEquals(6)
+        compose.onAllNodesWithTag(RecipeCardTestTags.MODIFIED).assertCountEquals(1)
+
+        compose.onNodeWithTag(RecipeCardTestTags.UNDO).performScrollTo().performClick()
+        waitForText("Chicken salad wrap")
+        compose.onNodeWithText("Chickpea salad wrap").assertDoesNotExist()
+        compose.onAllNodesWithTag(RecipeCardTestTags.MODIFIED).assertCountEquals(0)
+        compose.onNodeWithTag(RecipeCardTestTags.UNDO).assertDoesNotExist()
+    }
+
+    @Test
+    fun cancellingARunningChangeLeavesTheCardAsItWas() {
+        setContent()
+        send("Breakfast?")
+        client.events.trySend(LlmEvent.Delta(fixture("en_breakfast.txt")))
+        client.events.trySend(LlmEvent.Done(null))
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecipeCardTestTags.CARD).fetchSemanticsNodes().size == 1 }
+
+        compose.onNodeWithTag(RecipeCardTestTags.MODIFY).performScrollTo().performClick()
+        compose.onNodeWithTag(ModifySheetTestTags.INSTRUCTION).performTextInput("No honey")
+        client.cancelled = false // the finished reply above counts as a cancelled collection
+        compose.onNodeWithTag(ModifySheetTestTags.SEND).performClick()
+        compose.waitUntil(5_000) { client.requests.size == 2 }
+        compose.onNodeWithTag(ModifySheetTestTags.PROGRESS).assertExists()
+        compose.onNodeWithTag(RecipeCardTestTags.SAVE).assertIsNotEnabled()
+
+        compose.onNodeWithTag(ModifySheetTestTags.CANCEL).performClick()
+        compose.waitUntil(5_000) { client.cancelled }
+        compose.onNodeWithTag(ModifySheetTestTags.SHEET).assertDoesNotExist()
+        compose.onNodeWithTag(RecipeCardTestTags.MODIFYING).assertDoesNotExist()
+        compose.onNodeWithTag(RecipeCardTestTags.MODIFIED).assertDoesNotExist()
+        compose.onNodeWithTag(RecipeCardTestTags.SAVE).assertIsEnabled()
+        compose.onNodeWithText("Banana oatmeal with milk").assertExists()
     }
 
     private fun fixture(name: String) =

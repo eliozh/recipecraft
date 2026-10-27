@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.ModifyError
 import com.elio.recipecraft.data.llm.TranslationError
 
 /** The localized message for [kind]. */
@@ -28,6 +29,13 @@ fun translationErrorText(error: TranslationError): String = when (error) {
     is TranslationError.Llm -> llmErrorText(error.kind)
     TranslationError.Rejected -> stringResource(R.string.translate_error_rejected)
     TranslationError.Storage -> stringResource(R.string.translate_error_storage)
+}
+
+/** The localized message for why a recipe could not be changed. */
+@Composable
+fun modifyErrorText(error: ModifyError): String = when (error) {
+    is ModifyError.Llm -> llmErrorText(error.kind)
+    ModifyError.Rejected -> stringResource(R.string.modify_error_rejected)
 }
 
 /** Errors the user fixes in Settings, so the error offers a way there. */

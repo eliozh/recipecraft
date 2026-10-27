@@ -220,4 +220,20 @@
     <string name="translate_error_rejected">AI 的译文改动了文字以外的内容，因此未被采用。</string>
     <string name="translate_error_storage">无法读取或保存你的食谱。</string>
     <string name="recipe_translating">正在翻译…</string>
+    <string name="recipe_modify">用 AI 修改</string>
+    <string name="recipe_modified">已修改</string>
+    <string name="recipe_modifying">正在修改…</string>
+    <string name="recipe_save_changes">保存修改</string>
+    <string name="modify_instruction_hint">想怎么改？</string>
+    <string name="modify_chip_vegetarian">素食</string>
+    <string name="modify_chip_vegetarian_text">改成素食</string>
+    <string name="modify_chip_fewer_calories">减少热量</string>
+    <string name="modify_chip_fewer_calories_text">降低热量</string>
+    <string name="modify_chip_no_oven">不用烤箱</string>
+    <string name="modify_chip_no_oven_text">不使用烤箱</string>
+    <string name="modify_chip_swap">换一种食材</string>
+    <string name="modify_chip_swap_text">把其中一种食材换成别的</string>
+    <!-- 把快捷选项的文字接在已输入的内容后面 -->
+    <string name="modify_instruction_separator">；</string>
+    <string name="modify_error_rejected">AI 的回复不是可用的食谱，因此没有改动。</string>
 </resources>

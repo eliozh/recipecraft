@@ -1,0 +1,22 @@
+已改成素食：用豆腐代替牛肉。
+```json
+{
+  "recipes": [
+    {
+      "name": "番茄豆腐面",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 214,
+      "ingredients": [
+        { "name": "面条", "nameEn": "noodle", "quantity": "100", "unit": "克", "grams": 100, "aiKcal": 138 },
+        { "name": "老豆腐", "nameEn": "firm tofu", "quantity": "100", "unit": "克", "grams": 100, "aiKcal": 76 }
+      ],
+      "tools": ["锅", "刀"],
+      "steps": [
+        { "text": "豆腐切块煎至两面金黄。", "minutes": 5 },
+        { "text": "加番茄和面条煮熟。", "minutes": 10 }
+      ]
+    }
+  ]
+}
+```

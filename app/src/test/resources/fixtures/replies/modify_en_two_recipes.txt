@@ -1,0 +1,31 @@
+Here is a lighter wrap, and a second idea too.
+```json
+{
+  "recipes": [
+    {
+      "name": "Light chicken lettuce wrap",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 260,
+      "ingredients": [
+        { "name": "Chicken breast", "nameEn": "chicken breast", "quantity": "150", "unit": "g", "grams": 150, "aiKcal": 248 },
+        { "name": "Lettuce leaves", "nameEn": "lettuce", "quantity": "4", "unit": "", "grams": 80, "aiKcal": 12 }
+      ],
+      "tools": ["Pan"],
+      "steps": [{ "text": "Cook the chicken and wrap it in the lettuce.", "minutes": 10 }]
+    },
+    {
+      "name": "Tuna lettuce wrap",
+      "mealType": "lunch",
+      "servings": 1,
+      "aiKcal": 210,
+      "ingredients": [
+        { "name": "Tuna", "nameEn": "tuna", "quantity": "120", "unit": "g", "grams": 120, "aiKcal": 198 },
+        { "name": "Lettuce leaves", "nameEn": "lettuce", "quantity": "4", "unit": "", "grams": 80, "aiKcal": 12 }
+      ],
+      "tools": ["Bowl"],
+      "steps": [{ "text": "Wrap the tuna in the lettuce.", "minutes": 3 }]
+    }
+  ]
+}
+```
