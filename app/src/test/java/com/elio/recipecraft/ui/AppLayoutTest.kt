@@ -35,7 +35,21 @@ class AppLayoutTest {
     }
 
     @Test
-    fun aSmallSquareWindowKeepsTheBottomBar() {
-        assertEquals(AppLayout(NavigationType.BOTTOM_BAR, listDetail = false, compactHeight = true), layoutFor(360f, 380f))
+    fun aSmallSquareWindowIsTheCoverLayout() {
+        val cover = AppLayout(NavigationType.BOTTOM_BAR, listDetail = false, compactHeight = true, cover = true)
+        // The Galaxy Z Flip cover screen: 948 × 1048 px at 480 dpi.
+        assertEquals(cover, layoutFor(316f, 349f))
+        assertEquals(cover, layoutFor(360f, 380f))
+        // The largest window that still counts: just under medium width and medium height.
+        assertEquals(cover, layoutFor(599f, 479f))
+    }
+
+    @Test
+    fun onlyCompactWidthAndCompactHeightTogetherAreTheCoverLayout() {
+        assertEquals(false, layoutFor(412f, 915f).cover) // phone in portrait
+        assertEquals(false, layoutFor(599f, 480f).cover) // medium height
+        assertEquals(false, layoutFor(600f, 479f).cover) // medium width: a phone in landscape
+        assertEquals(false, layoutFor(915f, 412f).cover)
+        assertEquals(false, AppLayout.Compact.cover)
     }
 }

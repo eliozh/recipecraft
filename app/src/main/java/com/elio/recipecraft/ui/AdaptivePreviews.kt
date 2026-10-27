@@ -15,6 +15,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
@@ -31,13 +32,21 @@ import com.elio.recipecraft.ui.chat.ComposerState
 import com.elio.recipecraft.ui.chat.GenerationComposer
 import com.elio.recipecraft.ui.chat.PresetChip
 import com.elio.recipecraft.ui.chat.PresetChips
+import com.elio.recipecraft.ui.cover.CookModeContent
+import com.elio.recipecraft.ui.cover.CookTimer
+import com.elio.recipecraft.ui.cover.CookUiState
+import com.elio.recipecraft.ui.cover.CoverPreview
+import com.elio.recipecraft.ui.cover.CoverTopBar
+import com.elio.recipecraft.ui.recipe.CoverRecipeDetailContent
 import com.elio.recipecraft.ui.recipe.RecipeCard
 import com.elio.recipecraft.ui.theme.RecipeCraftTheme
 
-// Previews of the adaptive frame at phone, landscape phone, foldable, tablet and desktop sizes.
-// The screens take Hilt view models, so these lay out their stateless parts the same way.
+// Previews of the adaptive frame at phone, landscape phone, foldable, tablet and desktop sizes, and
+// at the Galaxy Z Flip cover screen. The screens take Hilt view models, so these lay out their
+// stateless parts the same way.
 
 @PreviewScreenSizes
+@CoverPreview
 @Composable
 private fun ChatLayoutPreview() = PreviewFrame(TopLevelDestination.CHAT) {
     val layout = LocalAppLayout.current
@@ -46,7 +55,8 @@ private fun ChatLayoutPreview() = PreviewFrame(TopLevelDestination.CHAT) {
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp)) {
             item { RecipeCard(previewRecipes.first()) }
         }
-        GenerationComposer(
+        // The cover screen opens the composer full screen from its top bar instead.
+        if (!layout.cover) GenerationComposer(
             state = ComposerState(expanded = !layout.compactHeight),
             sending = false,
             onScopeChanged = {},
@@ -60,6 +70,7 @@ private fun ChatLayoutPreview() = PreviewFrame(TopLevelDestination.CHAT) {
 }
 
 @PreviewScreenSizes
+@CoverPreview
 @Composable
 private fun LibraryLayoutPreview() = PreviewFrame(TopLevelDestination.LIBRARY) {
     val list = @Composable { modifier: Modifier ->
@@ -87,6 +98,7 @@ private fun LibraryLayoutPreview() = PreviewFrame(TopLevelDestination.LIBRARY) {
 }
 
 @PreviewScreenSizes
+@CoverPreview
 @Composable
 private fun SettingsLayoutPreview() = PreviewFrame(TopLevelDestination.SETTINGS) {
     Column(Modifier.fillMaxSize()) {
@@ -102,10 +114,46 @@ private fun PreviewFrame(selected: TopLevelDestination, content: @Composable () 
     }
 }
 
+@CoverPreview
+@Composable
+private fun CoverRecipeDetailPreview() = PreviewFrame(TopLevelDestination.LIBRARY) {
+    CoverRecipeDetailContent(previewRecipes.first(), listOf(215), canModify = true, onModify = {}, onCook = {})
+}
+
+/** Cook mode on the cover screen, on a step whose timer runs. */
+@CoverPreview
+@PreviewScreenSizes
+@Composable
+private fun CookModePreview() = RecipeCraftTheme {
+    CompositionLocalProvider(LocalAppLayout provides currentAppLayout()) {
+        val recipe = previewRecipes.first().copy(
+            steps = listOf(Step(1, "Whisk the eggs with a pinch of salt.", null), Step(2, "Cook over low heat until just set.", 3)),
+        )
+        CookModeContent(
+            state = CookUiState(
+                loading = false,
+                recipe = recipe,
+                page = 1,
+                timers = mapOf(1 to CookTimer.ofMinutes(3).start(now = 0)),
+                now = 75_000,
+            ),
+            onClose = {},
+            onPageChanged = {},
+            onStartTimer = {},
+            onPauseTimer = {},
+            onResetTimer = {},
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PreviewTopBar(titleRes: Int) {
-    TopAppBar(title = { Text(stringResource(titleRes)) })
+    if (LocalAppLayout.current.cover) {
+        CoverTopBar(stringResource(titleRes))
+    } else {
+        TopAppBar(title = { Text(stringResource(titleRes)) })
+    }
 }
 
 private val previewRecipes = listOf("Cheese omelette", "Tomato soup", "Oatmeal").mapIndexed { i, name ->

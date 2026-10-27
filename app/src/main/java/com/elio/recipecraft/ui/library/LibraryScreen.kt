@@ -2,6 +2,7 @@ package com.elio.recipecraft.ui.library
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,11 +20,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -32,16 +41,23 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +66,9 @@ import com.elio.recipecraft.data.recipe.RecipeExportResult
 import com.elio.recipecraft.data.recipe.exportFileName
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.LocalAppLayout
+import com.elio.recipecraft.ui.cover.CoverTopBar
+import com.elio.recipecraft.ui.cover.CoverTouchTarget
 import com.elio.recipecraft.ui.recipe.CaloriesLabel
 import com.elio.recipecraft.ui.recipe.label
 import java.time.LocalDate
@@ -73,19 +92,38 @@ fun LibraryScreen(
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         viewModel.onImportFrom(uri?.toString())
     }
+    // The cover screen folds the search behind an icon and the meal filter into a menu.
+    val cover = LocalAppLayout.current.cover
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    val searchShown = searchOpen || state.query.isNotEmpty()
+    val canBrowse = !state.loading && !state.loadFailed && !state.libraryEmpty
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TopAppBar(
-                title = { Text(stringResource(R.string.tab_library)) },
-                actions = {
-                    LibraryMenu(
-                        canExport = !state.loading && !state.loadFailed && !state.libraryEmpty,
-                        busy = state.transferring,
-                        onExportAll = { exportLauncher.launch(exportFileName(LocalDate.now())) },
-                        onImport = { importLauncher.launch(IMPORT_MIME_TYPES) },
-                    )
-                },
-            )
+            val menu = @Composable {
+                LibraryMenu(
+                    canExport = canBrowse,
+                    busy = state.transferring,
+                    onExportAll = { exportLauncher.launch(exportFileName(LocalDate.now())) },
+                    onImport = { importLauncher.launch(IMPORT_MIME_TYPES) },
+                )
+            }
+            if (cover) {
+                CoverTopBar(title = stringResource(R.string.tab_library)) {
+                    if (canBrowse) {
+                        CoverSearchToggle(
+                            shown = searchShown,
+                            onShownChanged = { shown ->
+                                searchOpen = shown
+                                if (!shown) viewModel.onQueryChanged("")
+                            },
+                        )
+                        MealFilterMenu(state.mealType, viewModel::onMealTypeSelected)
+                    }
+                    menu()
+                }
+            } else {
+                TopAppBar(title = { Text(stringResource(R.string.tab_library)) }, actions = { menu() })
+            }
             if (state.transferring) {
                 LinearProgressIndicator(Modifier.fillMaxWidth().testTag(LibraryTestTags.TRANSFERRING))
             }
@@ -94,9 +132,15 @@ fun LibraryScreen(
                 state.loadFailed -> Message(stringResource(R.string.library_load_failed), LibraryTestTags.LOAD_FAILED)
                 state.libraryEmpty -> EmptyLibrary(onOpenChat)
                 else -> {
-                    SearchAndFilter(state, viewModel::onQueryChanged, viewModel::onMealTypeSelected)
+                    if (!cover) {
+                        SearchAndFilter(state, viewModel::onQueryChanged, viewModel::onMealTypeSelected)
+                    } else if (searchShown) {
+                        CoverSearchField(state.query, viewModel::onQueryChanged)
+                    }
                     if (state.recipes.isEmpty()) {
                         Message(stringResource(R.string.library_no_match), LibraryTestTags.NO_MATCH)
+                    } else if (cover) {
+                        CoverRecipeList(state.recipes, onOpenRecipe)
                     } else {
                         RecipeList(state.recipes, selectedId, onOpenRecipe)
                     }
@@ -215,6 +259,90 @@ private fun LibraryItem(recipe: Recipe, selected: Boolean, onClick: () -> Unit) 
 }
 
 @Composable
+private fun CoverSearchToggle(shown: Boolean, onShownChanged: (Boolean) -> Unit) {
+    IconButton(onClick = { onShownChanged(!shown) }, modifier = Modifier.testTag(LibraryTestTags.SEARCH_TOGGLE)) {
+        if (shown) {
+            Icon(painterResource(R.drawable.ic_close), contentDescription = stringResource(R.string.library_close_search))
+        } else {
+            Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.library_search))
+        }
+    }
+}
+
+/** The search field on the cover screen, focused as it opens. */
+@Composable
+private fun CoverSearchField(query: String, onQueryChanged: (String) -> Unit) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { if (query.isEmpty()) focusRequester.requestFocus() }
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChanged,
+        placeholder = { Text(stringResource(R.string.library_search_hint), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp)
+            .focusRequester(focusRequester)
+            .testTag(LibraryTestTags.SEARCH),
+    )
+}
+
+/** The meal filter as a menu, where the cover screen has no width for a row of chips. */
+@Composable
+private fun MealFilterMenu(selected: MealType?, onSelected: (MealType?) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { expanded = true }, modifier = Modifier.testTag(LibraryTestTags.FILTER)) {
+            Icon(
+                painterResource(R.drawable.ic_filter_list),
+                contentDescription = stringResource(R.string.library_filter),
+                tint = if (selected != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            (listOf(null) + MealType.entries).forEach { type ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(type?.label ?: R.string.library_filter_all)) },
+                    leadingIcon = { RadioButton(selected = type == selected, onClick = null) },
+                    onClick = {
+                        expanded = false
+                        onSelected(type)
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** The library as a dense list for the cover screen: a name and its calories per row. */
+@Composable
+private fun CoverRecipeList(recipes: List<Recipe>, onOpenRecipe: (String) -> Unit) {
+    LazyColumn(modifier = Modifier.fillMaxSize().testTag(LibraryTestTags.LIST)) {
+        items(recipes, key = { it.id }) { recipe ->
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = CoverTouchTarget)
+                    .clickable { onOpenRecipe(recipe.id) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag(LibraryTestTags.ITEM),
+            ) {
+                Text(
+                    recipe.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() },
+                )
+                CaloriesLabel(recipe.calories)
+            }
+            HorizontalDivider()
+        }
+    }
+}
+
+@Composable
 private fun EmptyLibrary(onOpenChat: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -246,6 +374,8 @@ private fun Message(text: String, tag: String) {
 /** Stable handles for UI tests. */
 object LibraryTestTags {
     const val SEARCH = "library_search"
+    const val SEARCH_TOGGLE = "library_search_toggle"
+    const val FILTER = "library_filter"
     const val LIST = "library_list"
     const val ITEM = "library_item"
     const val EMPTY = "library_empty"

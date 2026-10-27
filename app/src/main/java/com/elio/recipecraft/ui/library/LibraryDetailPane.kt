@@ -37,6 +37,7 @@ fun LibraryListDetail(
     selectedId: String?,
     onSelect: (String?) -> Unit,
     onOpenChat: () -> Unit,
+    onCook: (String) -> Unit,
     libraryViewModel: LibraryViewModel,
     detailViewModel: @Composable (recipeId: String) -> RecipeDetailViewModel,
     modifier: Modifier = Modifier,
@@ -90,6 +91,7 @@ fun LibraryListDetail(
                         onBack = { onSelect(null) },
                         onDeleted = { onSelect(null) },
                         onOpenRecipe = onSelect,
+                        onCook = onCook,
                         viewModel = detailViewModel(selectedId),
                     )
                 }

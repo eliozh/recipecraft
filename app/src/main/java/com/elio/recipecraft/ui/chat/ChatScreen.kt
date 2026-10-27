@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +44,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
@@ -53,7 +57,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
@@ -63,7 +70,9 @@ import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.ui.LocalAppLayout
 import com.elio.recipecraft.ui.common.isFixedInSettings
+import com.elio.recipecraft.ui.cover.CoverTopBar
 import com.elio.recipecraft.ui.common.llmErrorText
+import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.GenerationShortfall
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.domain.daySets
@@ -81,6 +90,9 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     // A short window, such as a phone in landscape, folds the composer so the messages keep the room.
     val compactHeight = LocalAppLayout.current.compactHeight
+    // The cover screen has room for the messages and one line of input; the composer opens full screen.
+    val cover = LocalAppLayout.current.cover
+    var coverComposerOpen by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(compactHeight) {
         if (compactHeight) viewModel.onComposerExpandedChanged(false)
     }
@@ -94,24 +106,27 @@ fun ChatScreen(
     val typingInShortWindow = compactHeight && WindowInsets.isImeVisible
 
     Column(modifier.fillMaxSize().imePadding()) {
-        if (typingInShortWindow) {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
-        } else {
-            TopAppBar(
-                title = { Text(stringResource(R.string.tab_chat)) },
-                actions = {
-                    IconButton(onClick = viewModel::onShowRecent, modifier = Modifier.testTag(ChatTestTags.RECENT)) {
-                        Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.chat_recent))
-                    }
-                    IconButton(
-                        onClick = viewModel::onNewChat,
-                        enabled = state.messages.isNotEmpty() || state.sending,
-                        modifier = Modifier.testTag(ChatTestTags.NEW_CHAT),
-                    ) {
-                        Icon(painterResource(R.drawable.ic_new_chat), contentDescription = stringResource(R.string.chat_new))
-                    }
-                },
-            )
+        val actions = @Composable {
+            if (cover) {
+                IconButton(onClick = { coverComposerOpen = true }, modifier = Modifier.testTag(ChatTestTags.OPEN_COMPOSER)) {
+                    Icon(painterResource(R.drawable.ic_tune), contentDescription = stringResource(R.string.composer_show))
+                }
+            }
+            IconButton(onClick = viewModel::onShowRecent, modifier = Modifier.testTag(ChatTestTags.RECENT)) {
+                Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.chat_recent))
+            }
+            IconButton(
+                onClick = viewModel::onNewChat,
+                enabled = state.messages.isNotEmpty() || state.sending,
+                modifier = Modifier.testTag(ChatTestTags.NEW_CHAT),
+            ) {
+                Icon(painterResource(R.drawable.ic_new_chat), contentDescription = stringResource(R.string.chat_new))
+            }
+        }
+        when {
+            typingInShortWindow -> Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            cover -> CoverTopBar(title = stringResource(R.string.tab_chat), actions = { actions() })
+            else -> TopAppBar(title = { Text(stringResource(R.string.tab_chat)) }, actions = { actions() })
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
@@ -147,7 +162,10 @@ fun ChatScreen(
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.align(Alignment.Center).verticalScroll(rememberScrollState()).padding(32.dp),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .verticalScroll(rememberScrollState())
+                        .padding(if (cover) 16.dp else 32.dp),
                 ) {
                     Text(
                         text = stringResource(R.string.chat_empty),
@@ -164,7 +182,7 @@ fun ChatScreen(
             }
         }
         if (state.sending) LinearProgressIndicator(Modifier.fillMaxWidth())
-        if (!typingInShortWindow) {
+        if (!typingInShortWindow && !cover) {
             GenerationComposer(
                 state = state.composer,
                 sending = state.sending,
@@ -216,7 +234,48 @@ fun ChatScreen(
             onStop = viewModel::onStop,
             // Typing a message folds the composer, so the keyboard leaves room for the messages.
             onFocused = { viewModel.onComposerExpandedChanged(false) },
+            compact = cover,
         )
+    }
+    if (cover && coverComposerOpen) {
+        CoverComposerDialog(
+            state = state.composer,
+            sending = state.sending,
+            onScopeChanged = viewModel::onScopeChanged,
+            onCountChanged = viewModel::onCountChanged,
+            onPreferencesChanged = viewModel::onPreferencesChanged,
+            onGenerate = {
+                viewModel.onGenerate()
+                coverComposerOpen = false
+            },
+            onDismiss = { coverComposerOpen = false },
+        )
+    }
+}
+
+/** The composer over the whole cover screen; its header folds it away, as it does inline. */
+@Composable
+private fun CoverComposerDialog(
+    state: ComposerState,
+    sending: Boolean,
+    onScopeChanged: (GenerationScope) -> Unit,
+    onCountChanged: (Int) -> Unit,
+    onPreferencesChanged: (String) -> Unit,
+    onGenerate: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize()) {
+            GenerationComposer(
+                state = state.copy(expanded = true),
+                sending = sending,
+                onScopeChanged = onScopeChanged,
+                onCountChanged = onCountChanged,
+                onPreferencesChanged = onPreferencesChanged,
+                onExpandedChanged = { expanded -> if (!expanded) onDismiss() },
+                onGenerate = onGenerate,
+            )
+        }
     }
 }
 
@@ -426,6 +485,8 @@ private fun Composer(
     onSend: () -> Unit,
     onStop: () -> Unit,
     onFocused: () -> Unit,
+    /** One line, with icon buttons: the cover screen's narrow input. */
+    compact: Boolean = false,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -435,8 +496,11 @@ private fun Composer(
         OutlinedTextField(
             value = input,
             onValueChange = onInputChanged,
-            placeholder = { Text(stringResource(R.string.chat_input_hint)) },
-            maxLines = 5,
+            placeholder = {
+                Text(stringResource(R.string.chat_input_hint), maxLines = if (compact) 1 else Int.MAX_VALUE, overflow = TextOverflow.Ellipsis)
+            },
+            // Not singleLine: switching that on a live field breaks its saved scroll orientation.
+            maxLines = if (compact) 1 else 5,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { onSend() }),
             modifier = Modifier
@@ -444,10 +508,15 @@ private fun Composer(
                 .onFocusChanged { if (it.isFocused) onFocused() }
                 .testTag(ChatTestTags.INPUT),
         )
-        if (sending) {
-            TextButton(onClick = onStop) { Text(stringResource(R.string.chat_stop)) }
-        } else {
-            Button(onClick = onSend, enabled = canSend) { Text(stringResource(R.string.chat_send)) }
+        when {
+            compact && sending -> IconButton(onClick = onStop) {
+                Icon(painterResource(R.drawable.ic_stop), contentDescription = stringResource(R.string.chat_stop))
+            }
+            compact -> FilledIconButton(onClick = onSend, enabled = canSend) {
+                Icon(painterResource(R.drawable.ic_send), contentDescription = stringResource(R.string.chat_send))
+            }
+            sending -> TextButton(onClick = onStop) { Text(stringResource(R.string.chat_stop)) }
+            else -> Button(onClick = onSend, enabled = canSend) { Text(stringResource(R.string.chat_send)) }
         }
     }
 }
@@ -469,4 +538,5 @@ object ChatTestTags {
     const val SAVE_FAILED = "chat_save_failed"
     const val RECENT = "chat_recent"
     const val NEW_CHAT = "chat_new"
+    const val OPEN_COMPOSER = "chat_open_composer"
 }

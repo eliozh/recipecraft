@@ -292,4 +292,24 @@
     <string name="recipe_import_error_newer_version">此文件由更新版本的 RecipeCraft 导出，请更新应用后再导入。</string>
     <string name="recipe_import_error_save_failed">无法保存食谱，请重试。</string>
     <string name="recipe_share">分享</string>
+    <!-- 烹饪模式与外屏 -->
+    <string name="recipe_cook">开始烹饪</string>
+    <string name="cook_close">退出烹饪模式</string>
+    <string name="cook_step_indicator">%1$d / %2$d</string>
+    <string name="cook_step_of">第 %1$d 步，共 %2$d 步</string>
+    <string name="cook_previous">上一步</string>
+    <string name="cook_next">下一步</string>
+    <string name="cook_done">完成</string>
+    <string name="cook_no_steps">这份食谱没有步骤。</string>
+    <string name="cook_timer_start">开始计时</string>
+    <string name="cook_timer_resume">继续计时</string>
+    <string name="cook_timer_restart">重新计时</string>
+    <string name="cook_timer_pause">暂停计时</string>
+    <string name="cook_timer_reset">重置计时</string>
+    <string name="cook_timer_finished">时间到</string>
+    <string name="cover_section_expanded">已展开</string>
+    <string name="cover_section_collapsed">已收起</string>
+    <string name="library_search">搜索</string>
+    <string name="library_close_search">关闭搜索</string>
+    <string name="library_filter">按餐次筛选</string>
 </resources>

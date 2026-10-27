@@ -311,4 +311,24 @@
     <string name="recipe_import_error_newer_version">This file was exported by a newer version of RecipeCraft. Update the app to import it.</string>
     <string name="recipe_import_error_save_failed">Couldn\'t save the recipes. Try again.</string>
     <string name="recipe_share">Share</string>
+    <!-- Cook mode and the cover screen -->
+    <string name="recipe_cook">Cook</string>
+    <string name="cook_close">Close cook mode</string>
+    <string name="cook_step_indicator">%1$d / %2$d</string>
+    <string name="cook_step_of">Step %1$d of %2$d</string>
+    <string name="cook_previous">Previous</string>
+    <string name="cook_next">Next</string>
+    <string name="cook_done">Done</string>
+    <string name="cook_no_steps">This recipe has no steps.</string>
+    <string name="cook_timer_start">Start timer</string>
+    <string name="cook_timer_resume">Resume timer</string>
+    <string name="cook_timer_restart">Restart timer</string>
+    <string name="cook_timer_pause">Pause timer</string>
+    <string name="cook_timer_reset">Reset timer</string>
+    <string name="cook_timer_finished">Time\'s up</string>
+    <string name="cover_section_expanded">Expanded</string>
+    <string name="cover_section_collapsed">Collapsed</string>
+    <string name="library_search">Search</string>
+    <string name="library_close_search">Close search</string>
+    <string name="library_filter">Filter by meal</string>
 </resources>

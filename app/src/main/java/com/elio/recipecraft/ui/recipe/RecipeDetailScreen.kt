@@ -4,7 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +16,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
@@ -30,6 +35,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -45,6 +53,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -53,6 +62,10 @@ import com.elio.recipecraft.R
 import com.elio.recipecraft.domain.Ingredient
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.LocalAppLayout
+import com.elio.recipecraft.ui.cover.CoverSectionHeader
+import com.elio.recipecraft.ui.cover.CoverTopBar
+import com.elio.recipecraft.ui.cover.CoverTouchTarget
 import com.elio.recipecraft.ui.chat.ModifySheet
 import com.elio.recipecraft.ui.common.translationErrorText
 import java.text.DateFormat
@@ -65,7 +78,10 @@ import kotlinx.coroutines.launch
  * action. After a delete it calls [onDeleted]; the library then offers Undo. A recipe in another
  * language than the app's offers Translate, which updates it in place. Modify with AI shows the
  * model's version next to the saved one; Replace updates the recipe in place, and Save as copy adds
- * a new recipe that [onOpenRecipe] can open.
+ * a new recipe that [onOpenRecipe] can open. Cook opens [onCook], one step at a time.
+ *
+ * On the cover screen it keeps the essentials: the name, the calories and a big Cook button, with
+ * the ingredients, tools and steps folded into sections that open on a tap.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +90,8 @@ fun RecipeDetailScreen(
     onDeleted: () -> Unit,
     onOpenRecipe: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** Opens Cook mode for the recipe; null leaves the Cook button out. */
+    onCook: ((String) -> Unit)? = null,
     viewModel: RecipeDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -126,60 +144,72 @@ fun RecipeDetailScreen(
         }
     }
 
+    val cover = LocalAppLayout.current.cover
     Scaffold(
         modifier = modifier,
         topBar = {
-            TopAppBar(
-                title = {},
-                navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.testTag(RecipeDetailTestTags.BACK)) {
-                        Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+            val navigationIcon = @Composable {
+                IconButton(onClick = onBack, modifier = Modifier.testTag(RecipeDetailTestTags.BACK)) {
+                    Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.action_back))
+                }
+            }
+            val actions = @Composable {
+                if (state.translating) {
+                    val translating = stringResource(R.string.recipe_translating)
+                    CircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .semantics { contentDescription = translating }
+                            .testTag(RecipeDetailTestTags.TRANSLATING),
+                    )
+                } else if (state.canTranslate) {
+                    TextButton(onClick = viewModel::translate, modifier = Modifier.testTag(RecipeDetailTestTags.TRANSLATE)) {
+                        Text(stringResource(R.string.action_translate))
                     }
-                },
-                actions = {
-                    if (state.translating) {
-                        val translating = stringResource(R.string.recipe_translating)
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .semantics { contentDescription = translating }
-                                .testTag(RecipeDetailTestTags.TRANSLATING),
-                        )
-                    } else if (state.canTranslate) {
-                        TextButton(onClick = viewModel::translate, modifier = Modifier.testTag(RecipeDetailTestTags.TRANSLATE)) {
-                            Text(stringResource(R.string.action_translate))
-                        }
+                }
+                val shown = state.recipe
+                if (shown != null) {
+                    IconButton(
+                        onClick = { shareRecipe(context, shown) },
+                        modifier = Modifier.testTag(RecipeDetailTestTags.SHARE),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_share), contentDescription = stringResource(R.string.recipe_share))
                     }
-                    val shown = state.recipe
-                    if (shown != null) {
-                        IconButton(
-                            onClick = { shareRecipe(context, shown) },
-                            modifier = Modifier.testTag(RecipeDetailTestTags.SHARE),
-                        ) {
-                            Icon(painterResource(R.drawable.ic_share), contentDescription = stringResource(R.string.recipe_share))
-                        }
-                        IconButton(
-                            onClick = viewModel::delete,
-                            enabled = !state.deleting,
-                            modifier = Modifier.testTag(RecipeDetailTestTags.DELETE),
-                        ) {
-                            Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.recipe_delete))
-                        }
+                    IconButton(
+                        onClick = viewModel::delete,
+                        enabled = !state.deleting,
+                        modifier = Modifier.testTag(RecipeDetailTestTags.DELETE),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.recipe_delete))
                     }
-                },
-            )
+                }
+            }
+            if (cover) {
+                CoverTopBar(title = "", navigationIcon = navigationIcon, actions = { actions() })
+            } else {
+                TopAppBar(title = {}, navigationIcon = navigationIcon, actions = { actions() })
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         val recipe = state.recipe
         when {
             state.loading -> Unit
+            recipe != null && cover -> CoverRecipeDetailContent(
+                recipe,
+                state.ingredientKcal,
+                canModify = state.canModify,
+                onModify = viewModel::openModify,
+                onCook = onCook?.let { { it(recipe.id) } },
+                modifier = Modifier.padding(padding),
+            )
             recipe != null -> RecipeDetailContent(
                 recipe,
                 state.ingredientKcal,
                 canModify = state.canModify,
                 onModify = viewModel::openModify,
+                onCook = onCook?.let { { it(recipe.id) } },
                 modifier = Modifier.padding(padding),
             )
             state.loadFailed -> Message(stringResource(R.string.recipe_load_failed), RecipeDetailTestTags.LOAD_FAILED, padding)
@@ -217,6 +247,7 @@ private fun RecipeDetailContent(
     ingredientKcal: List<Int?>,
     canModify: Boolean,
     onModify: () -> Unit,
+    onCook: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -225,7 +256,7 @@ private fun RecipeDetailContent(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.widthIn(max = 640.dp).fillMaxSize().testTag(RecipeDetailTestTags.SCREEN),
         ) {
-            item { Header(recipe, canModify, onModify) }
+            item { Header(recipe, canModify, onModify, onCook) }
             sectionTitle(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS)
             itemsIndexed(recipe.ingredients) { index, ingredient ->
                 IngredientRow(ingredient, ingredientKcal.getOrNull(index))
@@ -245,7 +276,7 @@ private fun RecipeDetailContent(
 }
 
 @Composable
-private fun Header(recipe: Recipe, canModify: Boolean, onModify: () -> Unit) {
+private fun Header(recipe: Recipe, canModify: Boolean, onModify: () -> Unit, onCook: (() -> Unit)?) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         Text(
             recipe.name,
@@ -284,12 +315,109 @@ private fun Header(recipe: Recipe, canModify: Boolean, onModify: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag(RecipeDetailTestTags.DISCLAIMER),
         )
-        FilledTonalButton(onClick = onModify, enabled = canModify, modifier = Modifier.testTag(RecipeDetailTestTags.MODIFY)) {
-            Text(stringResource(R.string.recipe_modify))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (onCook != null) CookButton(onCook)
+            FilledTonalButton(onClick = onModify, enabled = canModify, modifier = Modifier.testTag(RecipeDetailTestTags.MODIFY)) {
+                Text(stringResource(R.string.recipe_modify))
+            }
         }
         HorizontalDivider(Modifier.padding(top = 8.dp))
     }
 }
+
+@Composable
+private fun CookButton(onCook: () -> Unit, modifier: Modifier = Modifier) {
+    Button(onClick = onCook, modifier = modifier.testTag(RecipeDetailTestTags.COOK)) {
+        Icon(painterResource(R.drawable.ic_cook), contentDescription = null, modifier = Modifier.size(ButtonDefaults.IconSize))
+        Spacer(Modifier.size(ButtonDefaults.IconSpacing))
+        Text(stringResource(R.string.recipe_cook))
+    }
+}
+
+/**
+ * The cover-screen detail: the name, the calories and a big Cook button, then the ingredients,
+ * tools and steps as sections that start folded, then Modify with AI and the calorie disclaimer.
+ */
+@Composable
+internal fun CoverRecipeDetailContent(
+    recipe: Recipe,
+    ingredientKcal: List<Int?>,
+    canModify: Boolean,
+    onModify: () -> Unit,
+    onCook: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    var ingredientsOpen by rememberSaveable { mutableStateOf(false) }
+    var toolsOpen by rememberSaveable { mutableStateOf(false) }
+    var stepsOpen by rememberSaveable { mutableStateOf(false) }
+    LazyColumn(
+        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = modifier.fillMaxSize().testTag(RecipeDetailTestTags.SCREEN),
+    ) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Two lines at most, so the Cook button stays in view on the cover screen.
+                Text(
+                    recipe.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.semantics { heading() }.testTag(RecipeDetailTestTags.NAME),
+                )
+                CaloriesLabel(recipe.calories)
+                if (onCook != null) {
+                    CookButton(onCook, Modifier.fillMaxWidth().heightIn(min = COVER_COOK_HEIGHT))
+                }
+            }
+        }
+        coverSection(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS, ingredientsOpen, { ingredientsOpen = it }) {
+            itemsIndexed(recipe.ingredients) { index, ingredient -> IngredientRow(ingredient, ingredientKcal.getOrNull(index)) }
+        }
+        if (recipe.tools.isNotEmpty()) {
+            coverSection(R.string.recipe_tools, RecipeDetailTestTags.TOOLS, toolsOpen, { toolsOpen = it }) {
+                itemsIndexed(recipe.tools) { _, tool ->
+                    Text("• $tool", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(RecipeDetailTestTags.TOOL))
+                }
+            }
+        }
+        coverSection(R.string.recipe_steps, RecipeDetailTestTags.STEPS, stepsOpen, { stepsOpen = it }) {
+            itemsIndexed(recipe.steps) { _, step -> Box(Modifier.testTag(RecipeDetailTestTags.STEP)) { StepRow(step) } }
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                FilledTonalButton(
+                    onClick = onModify,
+                    enabled = canModify,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = CoverTouchTarget).testTag(RecipeDetailTestTags.MODIFY),
+                ) {
+                    Text(stringResource(R.string.recipe_modify))
+                }
+                Text(
+                    stringResource(R.string.recipe_calories_disclaimer),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(RecipeDetailTestTags.DISCLAIMER),
+                )
+            }
+        }
+    }
+}
+
+private fun LazyListScope.coverSection(
+    title: Int,
+    tag: String,
+    expanded: Boolean,
+    onExpandedChanged: (Boolean) -> Unit,
+    content: LazyListScope.() -> Unit,
+) {
+    item(contentType = "section") {
+        CoverSectionHeader(stringResource(title), expanded, onExpandedChanged, Modifier.testTag(tag))
+    }
+    if (expanded) content()
+}
+
+private val COVER_COOK_HEIGHT = 56.dp
 
 private fun LazyListScope.sectionTitle(title: Int, tag: String) {
     item(contentType = "section") {
@@ -360,6 +488,7 @@ object RecipeDetailTestTags {
     const val TRANSLATE = "recipe_detail_translate"
     const val TRANSLATING = "recipe_detail_translating"
     const val MODIFY = "recipe_detail_modify"
+    const val COOK = "recipe_detail_cook"
     const val NAME = "recipe_detail_name"
     const val META = "recipe_detail_meta"
     const val DATES = "recipe_detail_dates"

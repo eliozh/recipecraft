@@ -30,21 +30,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.window.core.layout.WindowSizeClass
+import com.elio.recipecraft.ui.cover.CoverNavigationBar
 
 /** Where the top-level destinations live. */
 enum class NavigationType { BOTTOM_BAR, RAIL }
 
-/**
- * How the app lays itself out in the current window.
- *
- * T18 adds a cover-screen layout here (compact width and compact height) next to these flags.
- */
+/** How the app lays itself out in the current window. */
 data class AppLayout(
     val navigation: NavigationType,
     /** The library list and a recipe's detail side by side. */
     val listDetail: Boolean,
     /** A short window, such as a phone in landscape: screens fold away what they can. */
     val compactHeight: Boolean,
+    /**
+     * A small near-square window, such as the cover screen of a flip phone: screens keep only the
+     * essentials, with large targets and no horizontal scrolling, and the navigation bar shows icons only.
+     */
+    val cover: Boolean = false,
 ) {
     companion object {
         /** A phone in portrait; also what screens see outside [AdaptiveScaffold], as in tests. */
@@ -54,15 +56,19 @@ data class AppLayout(
 
 /**
  * Compact width gets a bottom bar; medium width a navigation rail; expanded width a rail and the
- * library list and detail side by side.
+ * library list and detail side by side. Compact width and compact height together (under 600 dp
+ * wide and 480 dp tall) is the cover layout: the Galaxy Z Flip cover screen, about 316 × 349 dp,
+ * or a phone window that small in split screen.
  */
 fun appLayoutFor(sizeClass: WindowSizeClass): AppLayout {
     val medium = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_MEDIUM_LOWER_BOUND)
     val expanded = sizeClass.isWidthAtLeastBreakpoint(WindowSizeClass.WIDTH_DP_EXPANDED_LOWER_BOUND)
+    val compactHeight = !sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND)
     return AppLayout(
         navigation = if (medium) NavigationType.RAIL else NavigationType.BOTTOM_BAR,
         listDetail = expanded,
-        compactHeight = !sizeClass.isHeightAtLeastBreakpoint(WindowSizeClass.HEIGHT_DP_MEDIUM_LOWER_BOUND),
+        compactHeight = compactHeight,
+        cover = !medium && compactHeight,
     )
 }
 
@@ -76,27 +82,34 @@ fun currentAppLayout(): AppLayout = appLayoutFor(currentWindowAdaptiveInfo().win
 /**
  * The top-level navigation for [layout], around [content]. The content gets its start, end and
  * bottom insets handled (the system bars, the display cutout in landscape); each screen's top app
- * bar handles the status bar, so its color reaches the top edge.
+ * bar handles the status bar, so its color reaches the top edge. [showNavigation] false hides the
+ * bar or rail, for a full-screen task such as Cook mode; the content stays where it is in the
+ * composition, so it keeps its state.
  */
 @Composable
 fun AdaptiveScaffold(
     layout: AppLayout,
     isSelected: (TopLevelDestination) -> Boolean,
     onSelect: (TopLevelDestination) -> Unit,
+    showNavigation: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     CompositionLocalProvider(LocalAppLayout provides layout) {
         when (layout.navigation) {
             NavigationType.BOTTOM_BAR -> Scaffold(
                 bottomBar = {
-                    NavigationBar {
-                        TopLevelDestination.entries.forEach { destination ->
-                            NavigationBarItem(
-                                selected = isSelected(destination),
-                                onClick = { onSelect(destination) },
-                                icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
-                                label = { Text(stringResource(destination.labelRes)) },
-                            )
+                    when {
+                        !showNavigation -> Unit
+                        layout.cover -> CoverNavigationBar(isSelected, onSelect)
+                        else -> NavigationBar {
+                            TopLevelDestination.entries.forEach { destination ->
+                                NavigationBarItem(
+                                    selected = isSelected(destination),
+                                    onClick = { onSelect(destination) },
+                                    icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
+                                    label = { Text(stringResource(destination.labelRes)) },
+                                )
+                            }
                         }
                     }
                 },
@@ -107,23 +120,32 @@ fun AdaptiveScaffold(
             }
             NavigationType.RAIL -> Surface(color = MaterialTheme.colorScheme.background) {
                 Row(Modifier.fillMaxSize()) {
-                    NavigationRail(windowInsets = SafeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)) {
-                        TopLevelDestination.entries.forEach { destination ->
-                            NavigationRailItem(
-                                selected = isSelected(destination),
-                                onClick = { onSelect(destination) },
-                                icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
-                                label = { Text(stringResource(destination.labelRes)) },
-                            )
+                    if (showNavigation) {
+                        NavigationRail(windowInsets = SafeInsets.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start)) {
+                            TopLevelDestination.entries.forEach { destination ->
+                                NavigationRailItem(
+                                    selected = isSelected(destination),
+                                    onClick = { onSelect(destination) },
+                                    icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
+                                    label = { Text(stringResource(destination.labelRes)) },
+                                )
+                            }
                         }
                     }
                     Box(
                         Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            // The rail already keeps clear of the start edge.
-                            .consumeWindowInsets(SafeInsets.only(WindowInsetsSides.Start))
-                            .windowInsetsPadding(SideInsets.only(WindowInsetsSides.End + WindowInsetsSides.Bottom)),
+                            .then(
+                                if (showNavigation) {
+                                    // The rail already keeps clear of the start edge.
+                                    Modifier
+                                        .consumeWindowInsets(SafeInsets.only(WindowInsetsSides.Start))
+                                        .windowInsetsPadding(SideInsets.only(WindowInsetsSides.End + WindowInsetsSides.Bottom))
+                                } else {
+                                    Modifier.windowInsetsPadding(SideInsets)
+                                },
+                            ),
                     ) { content() }
                 }
             }

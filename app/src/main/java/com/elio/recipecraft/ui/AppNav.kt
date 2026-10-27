@@ -28,6 +28,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.elio.recipecraft.R
 import com.elio.recipecraft.ui.chat.ChatScreen
+import com.elio.recipecraft.ui.cover.CookModeScreen
+import com.elio.recipecraft.ui.cover.CookModeViewModel
 import com.elio.recipecraft.ui.library.LibraryListDetail
 import com.elio.recipecraft.ui.library.LibraryScreen
 import com.elio.recipecraft.ui.library.LibraryViewModel
@@ -57,6 +59,8 @@ fun AppNav() {
         layout = currentAppLayout(),
         isSelected = { destination -> currentDestination?.hierarchy?.any { it.route == destination.route } == true },
         onSelect = navController::navigateToTopLevel,
+        // Cook mode takes the whole window.
+        showNavigation = currentDestination?.route != COOK_ROUTE,
     ) {
         NavHost(navController = navController, startDestination = TopLevelDestination.CHAT.route) {
             composable(TopLevelDestination.CHAT.route) {
@@ -69,10 +73,11 @@ fun AppNav() {
 }
 
 /**
- * The Library tab: the list, and the detail screen of a recipe opened from it. A wide window shows
- * both side by side on the list's route, with the open recipe kept in that entry's saved state;
- * resizing moves an open recipe between the pane and its own screen. The view models are
- * parameters so tests can supply their own.
+ * The Library tab: the list, the detail screen of a recipe opened from it, and Cook mode for that
+ * recipe. A wide window shows the list and detail side by side on the list's route, with the open
+ * recipe kept in that entry's saved state; resizing moves an open recipe between the pane and its
+ * own screen. Cook mode is its own screen at every size, so folding and unfolding keep it open on
+ * the same step. The view models are parameters so tests can supply their own.
  */
 internal fun NavGraphBuilder.libraryGraph(
     navController: NavHostController,
@@ -80,7 +85,9 @@ internal fun NavGraphBuilder.libraryGraph(
     libraryViewModel: @Composable () -> LibraryViewModel = { hiltViewModel() },
     detailViewModel: @Composable () -> RecipeDetailViewModel = { hiltViewModel() },
     paneDetailViewModel: @Composable (recipeId: String) -> RecipeDetailViewModel = { id -> hiltPaneDetailViewModel(id) },
+    cookViewModel: @Composable () -> CookModeViewModel = { hiltViewModel() },
 ) {
+    val onCook = { id: String -> navController.navigate(cookRoute(id)) }
     navigation(startDestination = LIBRARY_ROUTE, route = TopLevelDestination.LIBRARY.route) {
         composable(LIBRARY_ROUTE) { entry ->
             val selectedId by entry.savedStateHandle.getStateFlow<String?>(SELECTED_RECIPE_KEY, null)
@@ -90,6 +97,7 @@ internal fun NavGraphBuilder.libraryGraph(
                     selectedId = selectedId,
                     onSelect = { id -> entry.savedStateHandle[SELECTED_RECIPE_KEY] = id },
                     onOpenChat = onOpenChat,
+                    onCook = onCook,
                     libraryViewModel = libraryViewModel(),
                     detailViewModel = paneDetailViewModel,
                 )
@@ -124,8 +132,15 @@ internal fun NavGraphBuilder.libraryGraph(
                 // The library under it is still on the back stack, with its filter and search.
                 onDeleted = { navController.popBackStack(LIBRARY_ROUTE, inclusive = false) },
                 onOpenRecipe = { id -> navController.navigate(recipeDetailRoute(id)) },
+                onCook = onCook,
                 viewModel = detailViewModel(),
             )
+        }
+        composable(
+            COOK_ROUTE,
+            arguments = listOf(navArgument(CookModeViewModel.ARG_RECIPE_ID) { type = NavType.StringType }),
+        ) {
+            CookModeScreen(onClose = { navController.popBackStack() }, viewModel = cookViewModel())
         }
     }
 }
@@ -152,7 +167,11 @@ private const val LIBRARY_ROUTE = "library"
 private const val SELECTED_RECIPE_KEY = "selected_recipe"
 private const val RECIPE_DETAIL_ROUTE = "recipe/{${RecipeDetailViewModel.ARG_RECIPE_ID}}"
 
+private const val COOK_ROUTE = "cook/{${CookModeViewModel.ARG_RECIPE_ID}}"
+
 private fun recipeDetailRoute(id: String) = "recipe/${Uri.encode(id)}"
+
+private fun cookRoute(id: String) = "cook/${Uri.encode(id)}"
 
 private fun NavHostController.navigateToTopLevel(destination: TopLevelDestination) {
     navigate(destination.route) {
