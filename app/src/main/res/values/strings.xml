@@ -6,5 +6,8 @@
     <string name="tab_settings">Settings</string>
     <string name="chat_placeholder">Chat with the AI to create recipes. Coming soon.</string>
     <string name="library_placeholder">Your saved recipes will appear here.</string>
-    <string name="settings_placeholder">Provider, API key and language settings will appear here.</string>
+    <string name="settings_language">Language</string>
+    <string name="language_follow_system">Follow system</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">中文</string>
 </resources>

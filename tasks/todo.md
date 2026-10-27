@@ -2,7 +2,7 @@
 
 ## Phase 1: Foundation and LLM round-trip
 - [x] T1 Project scaffold that builds and launches (JDK, Gradle, Compose shell, SDK 37/37/34, Kover set up with the rule off, .gitignore)
-- [ ] T2 English/Chinese UI with system-language priority
+- [x] T2 English/Chinese UI with system-language priority
 - [ ] T3 Configure a provider and store the API key encrypted
 - [ ] T4 Stream a free chat reply through an OpenAI-compatible provider (OpenAI/DeepSeek/custom); turn on the Kover 80% gate
 - [ ] T5 Stream through Claude and Anthropic-compatible custom endpoints

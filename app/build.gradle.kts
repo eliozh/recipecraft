@@ -1,3 +1,4 @@
+import javax.inject.Inject
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 
 plugins {
@@ -42,6 +43,39 @@ android {
     }
 }
 
+/**
+ * Android matches `values-zh` only for Simplified-script locales, so zh-TW and zh-HK would fall
+ * back to English. Copying the Chinese strings to `values-b+zh+Hant` keeps one source of truth.
+ */
+abstract class TraditionalChineseResTask : DefaultTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val chineseValues: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @get:Inject
+    abstract val fileSystem: FileSystemOperations
+
+    @TaskAction
+    fun copy() {
+        fileSystem.sync {
+            from(chineseValues)
+            into(outputDir.dir("values-b+zh+Hant"))
+        }
+    }
+}
+
+androidComponents {
+    onVariants { variant ->
+        val task = tasks.register<TraditionalChineseResTask>("generate${variant.name.replaceFirstChar(Char::uppercase)}TraditionalChineseRes") {
+            chineseValues.set(layout.projectDirectory.dir("src/main/res/values-zh"))
+        }
+        variant.sources.res?.addGeneratedSourceDirectory(task, TraditionalChineseResTask::outputDir)
+    }
+}
+
 kover {
     reports {
         filters {
@@ -74,4 +108,7 @@ dependencies {
 
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+    implementation(libs.androidx.hilt.lifecycle.viewmodel.compose)
+
+    testImplementation(libs.junit)
 }

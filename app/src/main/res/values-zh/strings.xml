@@ -6,5 +6,8 @@
     <string name="tab_settings">设置</string>
     <string name="chat_placeholder">与 AI 聊天来生成食谱，即将推出。</string>
     <string name="library_placeholder">你保存的食谱会显示在这里。</string>
-    <string name="settings_placeholder">服务商、API 密钥和语言设置会显示在这里。</string>
+    <string name="settings_language">语言</string>
+    <string name="language_follow_system">跟随系统</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">中文</string>
 </resources>
