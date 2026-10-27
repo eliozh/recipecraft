@@ -16,12 +16,14 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -29,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,33 +52,56 @@ import com.elio.recipecraft.R
 import com.elio.recipecraft.domain.Ingredient
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.chat.ModifySheet
 import com.elio.recipecraft.ui.common.translationErrorText
 import java.text.DateFormat
 import java.text.NumberFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 /**
  * A saved recipe in full: every field, the database kcal of each matched ingredient, and a Delete
  * action. After a delete it calls [onDeleted]; the library then offers Undo. A recipe in another
- * language than the app's offers Translate, which updates it in place.
+ * language than the app's offers Translate, which updates it in place. Modify with AI shows the
+ * model's version next to the saved one; Replace updates the recipe in place, and Save as copy adds
+ * a new recipe that [onOpenRecipe] can open.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecipeDetailScreen(
     onBack: () -> Unit,
     onDeleted: () -> Unit,
+    onOpenRecipe: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: RecipeDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val currentOnDeleted by rememberUpdatedState(onDeleted)
+    val currentOnOpenRecipe by rememberUpdatedState(onOpenRecipe)
+    val scope = rememberCoroutineScope()
+    val replacedMessage = stringResource(R.string.recipe_replaced)
+    val copiedMessage = stringResource(R.string.recipe_saved_as_copy)
+    val openLabel = stringResource(R.string.action_open)
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
             when (event) {
                 RecipeDetailEvent.Deleted -> currentOnDeleted()
+                RecipeDetailEvent.Replaced -> scope.launch { snackbarHostState.showSnackbar(replacedMessage) }
+                is RecipeDetailEvent.SavedCopy -> scope.launch {
+                    if (snackbarHostState.showSnackbar(copiedMessage, actionLabel = openLabel) == SnackbarResult.ActionPerformed) {
+                        currentOnOpenRecipe(event.id)
+                    }
+                }
             }
+        }
+    }
+    val modifySaveFailedMessage = stringResource(R.string.recipe_modify_save_failed)
+    LaunchedEffect(state.modifySaveFailed) {
+        if (state.modifySaveFailed) {
+            viewModel.onModifySaveFailedShown()
+            snackbarHostState.showSnackbar(modifySaveFailedMessage)
         }
     }
     val deleteFailedMessage = stringResource(R.string.recipe_delete_failed)
@@ -140,22 +166,57 @@ fun RecipeDetailScreen(
         val recipe = state.recipe
         when {
             state.loading -> Unit
-            recipe != null -> RecipeDetailContent(recipe, state.ingredientKcal, Modifier.padding(padding))
+            recipe != null -> RecipeDetailContent(
+                recipe,
+                state.ingredientKcal,
+                canModify = state.canModify,
+                onModify = viewModel::openModify,
+                modifier = Modifier.padding(padding),
+            )
             state.loadFailed -> Message(stringResource(R.string.recipe_load_failed), RecipeDetailTestTags.LOAD_FAILED, padding)
             else -> Message(stringResource(R.string.recipe_not_found), RecipeDetailTestTags.NOT_FOUND, padding)
         }
     }
+
+    val modify = state.modify
+    val preview = modify?.preview
+    if (preview != null) {
+        ModifyPreview(
+            before = preview.before,
+            after = preview.after,
+            saving = modify.saving,
+            onReplace = viewModel::replace,
+            onSaveAsCopy = viewModel::saveAsCopy,
+            onCancel = viewModel::cancelModify,
+        )
+    } else if (modify != null) {
+        ModifySheet(
+            recipeName = state.recipe?.name.orEmpty(),
+            instruction = modify.instruction,
+            running = modify.running,
+            error = modify.error,
+            onInstructionChanged = viewModel::onModifyInstructionChanged,
+            onSend = viewModel::sendModify,
+            onCancel = viewModel::cancelModify,
+        )
+    }
 }
 
 @Composable
-private fun RecipeDetailContent(recipe: Recipe, ingredientKcal: List<Int?>, modifier: Modifier = Modifier) {
+private fun RecipeDetailContent(
+    recipe: Recipe,
+    ingredientKcal: List<Int?>,
+    canModify: Boolean,
+    onModify: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.widthIn(max = 640.dp).fillMaxSize().testTag(RecipeDetailTestTags.SCREEN),
         ) {
-            item { Header(recipe) }
+            item { Header(recipe, canModify, onModify) }
             sectionTitle(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS)
             itemsIndexed(recipe.ingredients) { index, ingredient ->
                 IngredientRow(ingredient, ingredientKcal.getOrNull(index))
@@ -175,7 +236,7 @@ private fun RecipeDetailContent(recipe: Recipe, ingredientKcal: List<Int?>, modi
 }
 
 @Composable
-private fun Header(recipe: Recipe) {
+private fun Header(recipe: Recipe, canModify: Boolean, onModify: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
         Text(
             recipe.name,
@@ -214,6 +275,9 @@ private fun Header(recipe: Recipe) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.testTag(RecipeDetailTestTags.DISCLAIMER),
         )
+        FilledTonalButton(onClick = onModify, enabled = canModify, modifier = Modifier.testTag(RecipeDetailTestTags.MODIFY)) {
+            Text(stringResource(R.string.recipe_modify))
+        }
         HorizontalDivider(Modifier.padding(top = 8.dp))
     }
 }
@@ -285,6 +349,7 @@ object RecipeDetailTestTags {
     const val DELETE = "recipe_detail_delete"
     const val TRANSLATE = "recipe_detail_translate"
     const val TRANSLATING = "recipe_detail_translating"
+    const val MODIFY = "recipe_detail_modify"
     const val NAME = "recipe_detail_name"
     const val META = "recipe_detail_meta"
     const val DATES = "recipe_detail_dates"

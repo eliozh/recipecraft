@@ -1,6 +1,7 @@
 package com.elio.recipecraft.ui.recipe
 
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -26,14 +27,21 @@ import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.llm.AndroidAssetReader
+import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
 import com.elio.recipecraft.data.llm.LlmClientResult
 import com.elio.recipecraft.data.llm.LlmErrorKind
+import com.elio.recipecraft.data.llm.LlmEvent
+import com.elio.recipecraft.data.llm.LlmRequest
+import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.llm.PromptBuilder
+import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.RecipeTranslator
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.recipe.RecipeTranslations
+import com.elio.recipecraft.data.recipe.toDomain
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
 import com.elio.recipecraft.domain.AppLanguage
@@ -45,6 +53,7 @@ import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.domain.Step
 import com.elio.recipecraft.ui.TopLevelDestination
+import com.elio.recipecraft.ui.chat.ModifySheetTestTags
 import com.elio.recipecraft.ui.library.LibraryTestTags
 import com.elio.recipecraft.ui.library.LibraryViewModel
 import com.elio.recipecraft.ui.libraryGraph
@@ -52,15 +61,24 @@ import com.elio.recipecraft.ui.theme.RecipeCraftTheme
 import java.time.Clock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
-/** Opens a saved recipe from the real library graph, checks every section, then deletes it and undoes that. */
+/**
+ * Opens a saved recipe from the real library graph: checks every section, deletes it and undoes
+ * that, and changes it with Modify with AI against a scripted model, by Replace and Save as copy.
+ */
 @RunWith(AndroidJUnit4::class)
 class RecipeDetailTest {
 
@@ -93,14 +111,13 @@ class RecipeDetailTest {
 
     private val toast = omelette.copy(id = "toast-1", name = "Peanut butter toast", createdAt = 1_600_000_000_000)
 
-    private val repository by lazy {
-        val eggsOnly = object : NutritionLookups {
-            private val lookups = listOf<NutritionLookup>(TableLookup(IngredientMatcher(listOf(NutritionFood("egg", emptyList(), 143.0)))))
-            override suspend fun current() = lookups
-            override fun observe() = flowOf(lookups)
-        }
-        RecipeRepository(database.recipes(), eggsOnly, Dispatchers.IO)
+    private val eggsOnly = object : NutritionLookups {
+        private val lookups = listOf<NutritionLookup>(TableLookup(IngredientMatcher(listOf(NutritionFood("egg", emptyList(), 143.0)))))
+        override suspend fun current() = lookups
+        override fun observe() = flowOf(lookups)
     }
+
+    private val repository by lazy { RecipeRepository(database.recipes(), eggsOnly, Dispatchers.IO) }
 
     /** English, the language of every recipe here, so the screen offers no Translate. */
     private val english = object : AppLanguageSettings {
@@ -118,6 +135,25 @@ class RecipeDetailTest {
         RecipeTranslations(noKey, translator, repository, CoroutineScope(Dispatchers.Default))
     }
 
+    /** Each request takes the next reply sent here. */
+    private val replies = Channel<String>(Channel.UNLIMITED)
+    private val modifier by lazy {
+        val client = object : LlmClient {
+            override fun stream(request: LlmRequest): Flow<LlmEvent> = flow {
+                emit(LlmEvent.Delta(replies.receive()))
+                emit(LlmEvent.Done(null))
+            }
+
+            override suspend fun listModels() = ModelListResult.Success(emptyList())
+        }
+        val ready = object : LlmClientFactory {
+            override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Ready(client)
+            override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = forActiveProvider(requireModel)
+        }
+        val promptBuilder = PromptBuilder(AndroidAssetReader(context), english, Dispatchers.IO)
+        RecipeModifier(ready, promptBuilder, RecipeParser(), RecipeAssembler(Clock.systemUTC()), eggsOnly, Clock.systemUTC())
+    }
+
     private fun setContent() {
         val undoDelete = UndoDelete()
         val library = LibraryViewModel(repository, undoDelete)
@@ -129,7 +165,7 @@ class RecipeDetailTest {
                         navController,
                         onOpenChat = {},
                         libraryViewModel = { library },
-                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations) } },
+                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations, modifier, Clock.systemUTC()) } },
                     )
                 }
             }
@@ -208,6 +244,7 @@ class RecipeDetailTest {
                 RecipeDetailScreen(
                     onBack = {},
                     onDeleted = {},
+                    onOpenRecipe = {},
                     viewModel = viewModel {
                         RecipeDetailViewModel(
                             SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to "gone")),
@@ -215,6 +252,8 @@ class RecipeDetailTest {
                             UndoDelete(),
                             english,
                             translations,
+                            modifier,
+                            Clock.systemUTC(),
                         )
                     },
                 )
@@ -222,5 +261,94 @@ class RecipeDetailTest {
         }
         waitForTag(RecipeDetailTestTags.NOT_FOUND)
         compose.onNodeWithText(context.getString(R.string.recipe_not_found)).assertExists()
+    }
+
+    private fun fixture(name: String) =
+        javaClass.getResourceAsStream("/fixtures/replies/$name")!!.bufferedReader().readText()
+
+    private fun waitForText(text: String) =
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText(text)).fetchSemanticsNodes().isNotEmpty() }
+
+    /** From the library: open the omelette, ask for it vegetarian with the chip, and wait for the preview. */
+    private fun previewVegetarianOmelette() {
+        compose.onNodeWithText("Cheese omelette").performClick()
+        waitForTag(RecipeDetailTestTags.MODIFY)
+        compose.onNodeWithTag(RecipeDetailTestTags.MODIFY).performClick()
+        waitForTag(ModifySheetTestTags.SHEET)
+        compose.onNodeWithText(context.getString(R.string.modify_chip_vegetarian)).performClick()
+        compose.onNodeWithTag(ModifySheetTestTags.INSTRUCTION).assertTextContains("Make it vegetarian")
+        replies.trySend(fixture("modify_en_lunch_vegetarian.txt"))
+        compose.onNodeWithTag(ModifySheetTestTags.SEND).performClick()
+        waitForTag(ModifyPreviewTestTags.SHEET)
+        compose.onNodeWithTag(ModifySheetTestTags.SHEET).assertDoesNotExist()
+        compose.onNodeWithTag(ModifyPreviewTestTags.NAME).assertTextContains("After: Chickpea salad wrap", substring = true)
+        // Every omelette ingredient is removed and the wrap's are added further down the list.
+        compose.onNodeWithTag(ModifyPreviewTestTags.LIST).performScrollToNode(hasTestTag(ModifyPreviewTestTags.REMOVED))
+        compose.onNodeWithTag(ModifyPreviewTestTags.LIST).performScrollToNode(hasTestTag(ModifyPreviewTestTags.ADDED))
+        compose.onNodeWithTag(ModifyPreviewTestTags.LIST).performScrollToNode(hasContentDescription("Added: 150 g Chickpeas"))
+    }
+
+    @Test
+    fun modifyThenReplaceUpdatesTheSavedRecipeInPlace() {
+        runBlocking { repository.save(listOf(omelette, toast)) }
+        setContent()
+        waitForTag(LibraryTestTags.ITEM, 2)
+
+        // Cancel first: nothing changes.
+        previewVegetarianOmelette()
+        compose.onNodeWithTag(ModifyPreviewTestTags.CANCEL).performClick()
+        waitForTag(ModifyPreviewTestTags.SHEET, 0)
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assertTextContains("Cheese omelette")
+        assertEquals("Cheese omelette", runBlocking { database.recipes().all().single { it.id == omelette.id }.name })
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
+        waitForTag(LibraryTestTags.ITEM, 2)
+
+        previewVegetarianOmelette()
+        compose.onNodeWithTag(ModifyPreviewTestTags.REPLACE).performClick()
+        waitForTag(ModifyPreviewTestTags.SHEET, 0)
+        waitForText("Chickpea salad wrap")
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assertTextContains("Chickpea salad wrap")
+        waitForText(context.getString(R.string.recipe_replaced))
+        compose.onNodeWithTag(RecipeDetailTestTags.DATES).assertTextContains("Updated", substring = true)
+
+        val saved = runBlocking { database.recipes().all().map { it.toDomain() } }
+        assertEquals(2, saved.size)
+        val replaced = saved.single { it.id == omelette.id }
+        assertEquals("Chickpea salad wrap", replaced.name)
+        assertEquals(omelette.createdAt, replaced.createdAt)
+        assertTrue(replaced.updatedAt > omelette.updatedAt)
+    }
+
+    @Test
+    fun modifyThenSaveAsCopyAddsARecipeAndKeepsTheOriginal() {
+        runBlocking { repository.save(listOf(omelette)) }
+        val original = runBlocking { database.recipes().all().single() }
+        setContent()
+        waitForTag(LibraryTestTags.ITEM, 1)
+
+        previewVegetarianOmelette()
+        compose.onNodeWithTag(ModifyPreviewTestTags.SAVE_AS_COPY).performClick()
+        waitForTag(ModifyPreviewTestTags.SHEET, 0)
+        waitForText(context.getString(R.string.recipe_saved_as_copy))
+        // The original is still on screen and unchanged.
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assertTextContains("Cheese omelette")
+        val all = runBlocking { database.recipes().all() }
+        assertEquals(2, all.size)
+        assertEquals(original, all.single { it.id == omelette.id })
+        val copy = all.single { it.id != omelette.id }.toDomain()
+        assertNotEquals(omelette.id, copy.id)
+        assertNull(copy.setId)
+
+        // Open goes to the copy; back twice reaches the library, which holds both.
+        compose.onNodeWithText(context.getString(R.string.action_open)).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasTestTag(RecipeDetailTestTags.NAME) and hasText("Chickpea salad wrap")).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
+        waitForTag(LibraryTestTags.ITEM, 2)
+        compose.onNodeWithText("Chickpea salad wrap").assertExists()
+        compose.onNodeWithText("Cheese omelette").assertExists()
     }
 }

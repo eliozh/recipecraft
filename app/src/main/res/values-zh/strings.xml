@@ -236,4 +236,21 @@
     <!-- 把快捷选项的文字接在已输入的内容后面 -->
     <string name="modify_instruction_separator">；</string>
     <string name="modify_error_rejected">AI 的回复不是可用的食谱，因此没有改动。</string>
+    <string name="action_open">打开</string>
+    <string name="action_replace">替换</string>
+    <string name="action_save_as_copy">另存为副本</string>
+    <string name="modify_preview_title">查看改动</string>
+    <string name="modify_preview_before">修改前：%1$s</string>
+    <string name="modify_preview_after">修改后：%1$s</string>
+    <string name="modify_preview_name">名称</string>
+    <string name="modify_preview_servings">份数</string>
+    <string name="modify_preview_calories">热量</string>
+    <!-- 读屏软件读出的预览行，%1$s 是该行内容 -->
+    <string name="modify_preview_added">新增：%1$s</string>
+    <string name="modify_preview_removed">删除：%1$s</string>
+    <!-- %1$s 是新内容，%2$s 是原内容 -->
+    <string name="modify_preview_changed">改为 %1$s，原为 %2$s</string>
+    <string name="recipe_replaced">食谱已更新</string>
+    <string name="recipe_saved_as_copy">已另存为副本</string>
+    <string name="recipe_modify_save_failed">无法保存改动，请重试。</string>
 </resources>

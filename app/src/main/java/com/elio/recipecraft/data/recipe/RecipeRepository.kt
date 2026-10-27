@@ -84,6 +84,22 @@ class RecipeRepository @Inject constructor(
     }
 
     /**
+     * Writes a changed version of a saved recipe over it, such as the result of Modify with AI,
+     * which keeps the id and creation time. Like [update], it never brings back a recipe deleted
+     * meanwhile: it returns false and saves nothing then.
+     */
+    suspend fun replace(recipe: Recipe): Boolean = update(recipe)
+
+    /**
+     * Saves [recipe] as a new recipe with the id [id], created and updated at [now], with calories
+     * worked out again. A copy stands alone: it is not part of the original's full-day set, so its
+     * [Recipe.setId] is null. The recipe it was made from stays as it was.
+     */
+    suspend fun saveAsCopy(recipe: Recipe, id: String, now: Long) {
+        save(listOf(recipe.copy(id = id, setId = null, createdAt = now, updatedAt = now)))
+    }
+
+    /**
      * Recalculates every saved recipe's calories against [lookups] and writes back only those that
      * changed. The model's own estimate is kept. Returns how many recipes changed.
      */

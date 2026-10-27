@@ -171,4 +171,48 @@ class RecipeRepositoryTest {
         assertEquals(false, repository.update(testRecipe("gone")))
         assertEquals(listOf("a"), dao.recipes.map { it.id })
     }
+
+    @Test
+    fun `replace rewrites the saved recipe in place, keeping its id and creation time`() = runTest {
+        nutrition.lookups = listOf(lookupOf("egg" to 143.0))
+        repository.save(listOf(testRecipe("a", setId = "set-1", createdAt = 1_000), testRecipe("b", createdAt = 2_000)))
+        val changed = testRecipe("a", name = "Lighter", setId = "set-1", createdAt = 1_000, aiTotal = 200).copy(updatedAt = 5_000)
+
+        assertTrue(repository.replace(changed))
+
+        assertEquals(2, dao.recipes.size)
+        val replaced = dao.recipes.first { it.id == "a" }.toDomain()
+        assertEquals("Lighter", replaced.name)
+        assertEquals("set-1", replaced.setId)
+        assertEquals(1_000L, replaced.createdAt)
+        assertEquals(5_000L, replaced.updatedAt)
+        assertEquals(Calories(143, 72, CalorieSource.DATABASE, 200), replaced.calories)
+        assertEquals("Recipe b", dao.recipes.first { it.id == "b" }.name)
+    }
+
+    @Test
+    fun `replace never brings back a recipe deleted meanwhile`() = runTest {
+        assertEquals(false, repository.replace(testRecipe("gone")))
+        assertTrue(dao.recipes.isEmpty())
+    }
+
+    @Test
+    fun `save as copy adds a new recipe outside the set and leaves the original as it was`() = runTest {
+        nutrition.lookups = listOf(lookupOf("egg" to 143.0))
+        repository.save(listOf(testRecipe("a", setId = "set-1", createdAt = 1_000)))
+        val original = dao.recipes.single()
+        val changed = testRecipe("a", name = "Lighter", setId = "set-1", createdAt = 1_000, aiTotal = 200).copy(updatedAt = 5_000)
+
+        repository.saveAsCopy(changed, id = "copy-1", now = 9_000)
+
+        assertEquals(2, dao.recipes.size)
+        assertEquals(original, dao.recipes.first { it.id == "a" })
+        val copy = dao.recipes.first { it.id == "copy-1" }.toDomain()
+        assertEquals("Lighter", copy.name)
+        assertNull(copy.setId)
+        assertEquals(9_000L, copy.createdAt)
+        assertEquals(9_000L, copy.updatedAt)
+        assertEquals(Calories(143, 72, CalorieSource.DATABASE, 200), copy.calories)
+        assertEquals(2, repository.count.first())
+    }
 }

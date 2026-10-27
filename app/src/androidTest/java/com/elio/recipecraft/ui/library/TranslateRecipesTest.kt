@@ -25,6 +25,8 @@ import com.elio.recipecraft.data.llm.LlmEvent
 import com.elio.recipecraft.data.llm.LlmRequest
 import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.llm.PromptBuilder
+import com.elio.recipecraft.data.llm.RecipeAssembler
+import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.RecipeTranslator
 import com.elio.recipecraft.data.nutrition.IngredientMatcher
@@ -117,15 +119,22 @@ class TranslateRecipesTest {
 
         override suspend fun listModels() = ModelListResult.Success(emptyList())
     }
+    private val factory = object : LlmClientFactory {
+        override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Ready(client)
+        override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = forActiveProvider(requireModel)
+    }
+    private val promptBuilder = PromptBuilder(AndroidAssetReader(context), chinese, Dispatchers.IO)
     private val translations = RecipeTranslations(
-        object : LlmClientFactory {
-            override suspend fun forActiveProvider(requireModel: Boolean) = LlmClientResult.Ready(client)
-            override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean) = forActiveProvider(requireModel)
-        },
-        RecipeTranslator(PromptBuilder(AndroidAssetReader(context), chinese, Dispatchers.IO), RecipeParser(), Clock.systemUTC()),
+        factory,
+        RecipeTranslator(promptBuilder, RecipeParser(), Clock.systemUTC()),
         repository,
         scope,
     )
+    private val noTables = object : NutritionLookups {
+        override suspend fun current() = emptyList<NutritionLookup>()
+        override fun observe() = flowOf(emptyList<NutritionLookup>())
+    }
+    private val modifier = RecipeModifier(factory, promptBuilder, RecipeParser(), RecipeAssembler(Clock.systemUTC()), noTables, Clock.systemUTC())
 
     /** Newest first, so the batch takes them in this order. */
     private val english = listOf("Fried eggs", "Egg salad", "Boiled eggs").mapIndexed { i, name ->
@@ -167,6 +176,7 @@ class TranslateRecipesTest {
                         RecipeDetailScreen(
                             onBack = {},
                             onDeleted = {},
+                            onOpenRecipe = {},
                             viewModel = viewModel {
                                 RecipeDetailViewModel(
                                     SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to detailId)),
@@ -174,6 +184,8 @@ class TranslateRecipesTest {
                                     UndoDelete(),
                                     chinese,
                                     translations,
+                                    modifier,
+                                    Clock.systemUTC(),
                                 )
                             },
                         )

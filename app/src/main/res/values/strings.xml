@@ -251,4 +251,21 @@
     <!-- Joins a quick chip's text to what is already typed -->
     <string name="modify_instruction_separator">"; "</string>
     <string name="modify_error_rejected">The AI\'s reply wasn\'t a usable recipe, so nothing changed.</string>
+    <string name="action_open">Open</string>
+    <string name="action_replace">Replace</string>
+    <string name="action_save_as_copy">Save as copy</string>
+    <string name="modify_preview_title">Review the change</string>
+    <string name="modify_preview_before">Before: %1$s</string>
+    <string name="modify_preview_after">After: %1$s</string>
+    <string name="modify_preview_name">Name</string>
+    <string name="modify_preview_servings">Servings</string>
+    <string name="modify_preview_calories">Calories</string>
+    <!-- Read out by screen readers for a line of the preview; %1$s is the line -->
+    <string name="modify_preview_added">Added: %1$s</string>
+    <string name="modify_preview_removed">Removed: %1$s</string>
+    <!-- %1$s is the new line, %2$s the old one -->
+    <string name="modify_preview_changed">Changed to %1$s, was %2$s</string>
+    <string name="recipe_replaced">Recipe updated</string>
+    <string name="recipe_saved_as_copy">Saved as copy</string>
+    <string name="recipe_modify_save_failed">Couldn\'t save the change. Try again.</string>
 </resources>

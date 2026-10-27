@@ -109,6 +109,7 @@ internal fun NavGraphBuilder.libraryGraph(
                 onBack = { navController.popBackStack() },
                 // The library under it is still on the back stack, with its filter and search.
                 onDeleted = { navController.popBackStack(LIBRARY_ROUTE, inclusive = false) },
+                onOpenRecipe = { id -> navController.navigate(recipeDetailRoute(id)) },
                 viewModel = detailViewModel(),
             )
         }
