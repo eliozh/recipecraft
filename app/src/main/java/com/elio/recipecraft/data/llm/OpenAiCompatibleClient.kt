@@ -1,20 +1,15 @@
 package com.elio.recipecraft.data.llm
 
-import java.io.IOException
-import java.io.InterruptedIOException
-import kotlin.coroutines.resume
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
-import okhttp3.Call
-import okhttp3.Callback
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -67,6 +62,9 @@ class OpenAiCompatibleClient(
                 } catch (_: IllegalArgumentException) {
                     return finish(LlmEvent.Error(LlmErrorKind.MalformedResponse))
                 }
+                chunk.error?.let { error ->
+                    return finish(LlmEvent.Error(providerErrorKind(error.type, error.code?.contentOrNull)))
+                }
                 chunk.usage?.let { usage = Usage(it.promptTokens, it.completionTokens) }
                 chunk.choices.forEach { choice ->
                     choice.delta?.content?.takeIf { it.isNotEmpty() }?.let { trySend(LlmEvent.Delta(it)) }
@@ -97,33 +95,7 @@ class OpenAiCompatibleClient(
             .header("Authorization", "Bearer $apiKey")
             .get()
             .build()
-        val call = httpClient.newCall(request)
-        return suspendCancellableCoroutine { continuation ->
-            continuation.invokeOnCancellation { call.cancel() }
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    continuation.resume(ModelListResult.Failure(errorKind(e, null)))
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    continuation.resume(response.use { parseModels(it) })
-                }
-            })
-        }
-    }
-
-    private fun parseModels(response: Response): ModelListResult {
-        if (!response.isSuccessful) return ModelListResult.Failure(errorKind(null, response))
-        return try {
-            val list = json.decodeFromString(ModelList.serializer(), response.body.string())
-            ModelListResult.Success(list.data.map { it.id }.filter { it.isNotBlank() }.distinct().sorted())
-        } catch (_: IOException) {
-            ModelListResult.Failure(LlmErrorKind.Network)
-        } catch (_: SerializationException) {
-            ModelListResult.Failure(LlmErrorKind.MalformedResponse)
-        } catch (_: IllegalArgumentException) {
-            ModelListResult.Failure(LlmErrorKind.MalformedResponse)
-        }
+        return fetchModelIds(httpClient, request, json)
     }
 
     @Serializable
@@ -133,7 +105,11 @@ class OpenAiCompatibleClient(
     private data class WireMessage(val role: String, val content: String)
 
     @Serializable
-    private data class Chunk(val choices: List<Choice> = emptyList(), val usage: WireUsage? = null)
+    private data class Chunk(
+        val choices: List<Choice> = emptyList(),
+        val usage: WireUsage? = null,
+        val error: WireError? = null,
+    )
 
     @Serializable
     private data class Choice(
@@ -150,41 +126,11 @@ class OpenAiCompatibleClient(
         @SerialName("completion_tokens") val completionTokens: Int? = null,
     )
 
+    /** Only the identifiers are decoded; the provider's `message` is never read. `code` may be a string or a number. */
     @Serializable
-    private data class ModelList(val data: List<ModelEntry> = emptyList())
-
-    @Serializable
-    private data class ModelEntry(val id: String = "")
+    private data class WireError(val type: String? = null, val code: JsonPrimitive? = null)
 
     private companion object {
         const val DONE_MARKER = "[DONE]"
-        val JSON_MEDIA_TYPE = "application/json".toMediaType()
-
-        val LlmMessage.Role.wireName: String
-            get() = when (this) {
-                LlmMessage.Role.USER -> "user"
-                LlmMessage.Role.ASSISTANT -> "assistant"
-            }
-
-        /** Appends [path] to the base URL's path, so `https://host/v1` becomes `https://host/v1/models`. */
-        fun HttpUrl.resolvePath(path: String): HttpUrl {
-            val builder = newBuilder()
-            if (pathSegments.lastOrNull() == "") builder.removePathSegment(pathSegments.size - 1)
-            return builder.addPathSegments(path).build()
-        }
     }
-}
-
-/** Maps a transport failure or an HTTP error status to an error kind; never reads the body. */
-internal fun errorKind(t: Throwable?, response: Response?): LlmErrorKind = when {
-    response != null && !response.isSuccessful -> when (response.code) {
-        401, 403 -> LlmErrorKind.InvalidKey
-        429 -> LlmErrorKind.RateLimited
-        else -> LlmErrorKind.Server(response.code)
-    }
-    t is InterruptedIOException -> LlmErrorKind.Timeout
-    t is IOException -> LlmErrorKind.Network
-    // A successful status whose body is not an event stream.
-    response != null -> LlmErrorKind.MalformedResponse
-    else -> LlmErrorKind.Network
 }

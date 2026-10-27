@@ -75,7 +75,13 @@ fun ProviderSettings(
                     enabled = enabled,
                     label = { Text(stringResource(R.string.settings_base_url)) },
                     isError = urlError != null,
-                    supportingText = urlError?.let { { Text(stringResource(it)) } },
+                    supportingText = {
+                        val text = urlError ?: when (state.config.protocol) {
+                            Protocol.OPENAI_COMPATIBLE -> R.string.base_url_hint_openai
+                            Protocol.ANTHROPIC -> R.string.base_url_hint_anthropic
+                        }
+                        Text(stringResource(text))
+                    },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Uri,

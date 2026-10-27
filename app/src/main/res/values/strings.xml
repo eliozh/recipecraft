@@ -18,6 +18,8 @@
     <string name="base_url_required">Enter the endpoint\'s base URL.</string>
     <string name="base_url_invalid">Enter a full URL, such as https://api.example.com</string>
     <string name="base_url_insecure">Use an https:// URL so your API key is never sent unencrypted.</string>
+    <string name="base_url_hint_openai">Include the version path, such as https://api.example.com/v1</string>
+    <string name="base_url_hint_anthropic">The app adds /v1/messages, so enter the root, such as https://api.example.com</string>
     <string name="settings_protocol">Protocol</string>
     <string name="protocol_openai">OpenAI-compatible</string>
     <string name="protocol_anthropic">Anthropic-compatible</string>
@@ -44,7 +46,6 @@
     <string name="error_missing_key">No API key set. Add one in Settings.</string>
     <string name="error_missing_model">Pick a model in Settings first.</string>
     <string name="error_invalid_endpoint">The provider\'s base URL is missing or invalid. Fix it in Settings.</string>
-    <string name="error_unsupported_protocol">Anthropic-compatible providers aren\'t supported yet. Choose another provider in Settings.</string>
     <string name="error_keystore_unavailable">The device\'s secure key store is unavailable, so your API key can\'t be read. Restart the device or enter the key again in Settings.</string>
     <string name="error_settings_unavailable">Couldn\'t read your settings. Try again.</string>
     <string name="settings_test_connection">Test connection</string>

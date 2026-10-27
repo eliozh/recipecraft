@@ -5,7 +5,7 @@
 - [x] T2 English/Chinese UI with system-language priority
 - [x] T3 Configure a provider and store the API key encrypted
 - [x] T4 Stream a free chat reply through an OpenAI-compatible provider (OpenAI/DeepSeek/custom); turn on the Kover 80% gate
-- [ ] T5 Stream through Claude and Anthropic-compatible custom endpoints
+- [x] T5 Stream through Claude and Anthropic-compatible custom endpoints
 - [ ] T6 Generate one recipe and show it as a structured card (schema with nameEn/grams, prompts, parser)
 - [ ] T7 Database calorie matching against the bundled USDA table (asset, matcher, calculator, calorie label)
 - [ ] Checkpoint A: tests, build, lint, and Kover pass; recipe card works with 3 providers × 2 languages; calorie source correct; human review

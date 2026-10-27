@@ -177,6 +177,41 @@ class OpenAiCompatibleClientTest {
     }
 
     @Test
+    fun `an error object mid-stream ends the reply with its kind`() = runTest {
+        server.enqueue(sse("stream_error.txt").build())
+        client().stream(request).test {
+            assertEquals(LlmEvent.Delta("Try"), awaitItem())
+            assertEquals(LlmEvent.Error(LlmErrorKind.RateLimited), awaitItem())
+            awaitComplete()
+        }
+    }
+
+    @Test
+    fun `mid-stream error identifiers and numeric codes map to error kinds`() = runTest {
+        val cases = listOf(
+            """{"type":"invalid_request_error","code":"invalid_api_key"}""" to LlmErrorKind.InvalidKey,
+            """{"type":"invalid_request_error","code":"context_length_exceeded"}""" to LlmErrorKind.Server(400),
+            """{"type":"server_error","code":null}""" to LlmErrorKind.Server(500),
+            """{"code":503}""" to LlmErrorKind.Server(503),
+            """{"message":"no identifiers"}""" to LlmErrorKind.MalformedResponse,
+        )
+        cases.forEach { (error, _) ->
+            server.enqueue(
+                MockResponse.Builder()
+                    .setHeader("Content-Type", "text/event-stream")
+                    .body("data: {\"error\":$error}\n\n")
+                    .build(),
+            )
+        }
+        cases.forEach { (error, kind) ->
+            client().stream(request).test {
+                assertEquals(error, LlmEvent.Error(kind), awaitItem())
+                awaitComplete()
+            }
+        }
+    }
+
+    @Test
     fun `401 and 403 mean an invalid key`() = runTest {
         server.enqueue(MockResponse.Builder().code(401).body(fixture("error_401.json")).build())
         server.enqueue(MockResponse.Builder().code(403).body("{}").build())

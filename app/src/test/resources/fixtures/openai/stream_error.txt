@@ -1,0 +1,4 @@
+data: {"id":"chatcmpl-REDACTED","object":"chat.completion.chunk","created":1761552000,"model":"gpt-test","choices":[{"index":0,"delta":{"content":"Try"},"finish_reason":null}]}
+
+data: {"error":{"message":"You exceeded your current quota.","type":"insufficient_quota","param":null,"code":"insufficient_quota"}}
+

@@ -66,13 +66,30 @@ class LlmClientFactoryTest {
     }
 
     @Test
-    fun `anthropic protocols are not supported yet`() = runTest {
+    fun `claude, the default provider, gets an anthropic client`() = runTest {
         secrets.keys[ProviderType.CLAUDE] = PLACEHOLDER_KEY
+
+        val result = factory.forActiveProvider()
+
+        assertTrue(result is LlmClientResult.Ready)
+        assertTrue((result as LlmClientResult.Ready).client is AnthropicClient)
+    }
+
+    @Test
+    fun `a custom endpoint gets the client for its protocol`() = runTest {
         secrets.keys[ProviderType.CUSTOM] = PLACEHOLDER_KEY
         val custom = ProviderConfig(ProviderType.CUSTOM, "https://llm.example.com", Protocol.ANTHROPIC, "m")
 
-        assertEquals(LlmClientResult.Unavailable(LlmErrorKind.UnsupportedProtocol), factory.forActiveProvider())
-        assertEquals(LlmClientResult.Unavailable(LlmErrorKind.UnsupportedProtocol), factory.forConfig(custom))
+        val anthropic = factory.forConfig(custom) as LlmClientResult.Ready
+        val openAi = factory.forConfig(custom.copy(protocol = Protocol.OPENAI_COMPATIBLE)) as LlmClientResult.Ready
+
+        assertTrue(anthropic.client is AnthropicClient)
+        assertTrue(openAi.client is OpenAiCompatibleClient)
+    }
+
+    @Test
+    fun `claude without a key reports the missing key`() = runTest {
+        assertEquals(LlmClientResult.Unavailable(LlmErrorKind.MissingKey), factory.forActiveProvider())
     }
 
     @Test

@@ -39,9 +39,6 @@ sealed interface LlmErrorKind {
     /** The base URL is missing, invalid or not https. */
     data object InvalidEndpoint : LlmErrorKind
 
-    /** The provider's protocol has no client yet. */
-    data object UnsupportedProtocol : LlmErrorKind
-
     /** The Android Keystore could not open the saved key; not the same as having no key. */
     data object KeyStoreUnavailable : LlmErrorKind
 

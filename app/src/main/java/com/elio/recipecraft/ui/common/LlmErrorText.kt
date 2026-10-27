@@ -17,7 +17,6 @@ fun llmErrorText(kind: LlmErrorKind): String = when (kind) {
     LlmErrorKind.MissingKey -> stringResource(R.string.error_missing_key)
     LlmErrorKind.MissingModel -> stringResource(R.string.error_missing_model)
     LlmErrorKind.InvalidEndpoint -> stringResource(R.string.error_invalid_endpoint)
-    LlmErrorKind.UnsupportedProtocol -> stringResource(R.string.error_unsupported_protocol)
     LlmErrorKind.KeyStoreUnavailable -> stringResource(R.string.error_keystore_unavailable)
     LlmErrorKind.SettingsUnavailable -> stringResource(R.string.error_settings_unavailable)
 }
@@ -29,7 +28,6 @@ val LlmErrorKind.isFixedInSettings: Boolean
         LlmErrorKind.MissingKey,
         LlmErrorKind.MissingModel,
         LlmErrorKind.InvalidEndpoint,
-        LlmErrorKind.UnsupportedProtocol,
         LlmErrorKind.KeyStoreUnavailable,
         -> true
         else -> false

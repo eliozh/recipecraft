@@ -50,10 +50,6 @@ class DefaultLlmClientFactory @Inject constructor(
     override suspend fun forConfig(config: ProviderConfig, requireModel: Boolean): LlmClientResult {
         val problems = config.problems()
         unavailableReason(problems, requireModel)?.let { return LlmClientResult.Unavailable(it) }
-        // T5 adds the Anthropic Messages client.
-        if (config.protocol != Protocol.OPENAI_COMPATIBLE) {
-            return LlmClientResult.Unavailable(LlmErrorKind.UnsupportedProtocol)
-        }
         val key = try {
             secretStore.getKey(config.type)
         } catch (_: GeneralSecurityException) {
@@ -67,7 +63,12 @@ class DefaultLlmClientFactory @Inject constructor(
         } catch (_: IllegalArgumentException) {
             return LlmClientResult.Unavailable(LlmErrorKind.InvalidEndpoint)
         }
-        return LlmClientResult.Ready(OpenAiCompatibleClient(baseUrl, config.model.trim(), key, httpClient, json))
+        val model = config.model.trim()
+        val client = when (config.protocol) {
+            Protocol.OPENAI_COMPATIBLE -> OpenAiCompatibleClient(baseUrl, model, key, httpClient, json)
+            Protocol.ANTHROPIC -> AnthropicClient(baseUrl, model, key, httpClient, json)
+        }
+        return LlmClientResult.Ready(client)
     }
 
     private fun unavailableReason(problems: Set<ConfigProblem>, requireModel: Boolean): LlmErrorKind? = when {
