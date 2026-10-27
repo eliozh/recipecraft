@@ -1,0 +1,68 @@
+{
+    "version": 1,
+    "exportedAt": 1761609600000,
+    "recipes": [
+        {
+            "id": "zh-1",
+            "name": "番茄炒蛋",
+            "mealType": "DINNER",
+            "servings": 2,
+            "calories": {
+                "total": 380,
+                "perServing": 190,
+                "source": "AI_ESTIMATE",
+                "aiTotal": 380
+            },
+            "ingredients": [
+                {
+                    "name": "鸡蛋",
+                    "nameEn": "egg",
+                    "quantity": "3",
+                    "unit": "个",
+                    "grams": 150.0,
+                    "aiKcal": 215
+                },
+                {
+                    "name": "盐",
+                    "nameEn": "salt",
+                    "quantity": "",
+                    "unit": "适量",
+                    "grams": null,
+                    "aiKcal": null
+                }
+            ],
+            "tools": ["炒锅"],
+            "steps": [
+                { "index": 1, "text": "打散鸡蛋。", "minutes": 1 },
+                { "index": 2, "text": "翻炒出锅。", "minutes": null }
+            ],
+            "language": "ZH",
+            "setId": "set-1",
+            "createdAt": 1761600000000,
+            "updatedAt": 1761600500000
+        },
+        {
+            "id": "en-1",
+            "name": "Oatmeal",
+            "mealType": null,
+            "servings": 1,
+            "calories": {
+                "total": null,
+                "perServing": null,
+                "source": "AI_ESTIMATE",
+                "aiTotal": null
+            },
+            "ingredients": [
+                { "name": "Rolled oats", "nameEn": "rolled oats", "quantity": "1/2", "unit": "cup", "grams": 40.5, "aiKcal": 150 }
+            ],
+            "tools": [],
+            "steps": [
+                { "index": 1, "text": "Simmer the oats.", "minutes": 5 }
+            ],
+            "language": "EN",
+            "setId": null,
+            "createdAt": 1761500000000,
+            "updatedAt": 1761500000000
+        }
+    ]
+}

@@ -1,5 +1,7 @@
 package com.elio.recipecraft.ui.library
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,7 +17,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarDuration
@@ -23,6 +27,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,11 +44,15 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
+import com.elio.recipecraft.data.recipe.RecipeExportResult
+import com.elio.recipecraft.data.recipe.exportFileName
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.ui.recipe.CaloriesLabel
 import com.elio.recipecraft.ui.recipe.label
+import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     onOpenChat: () -> Unit,
@@ -54,8 +63,28 @@ fun LibraryScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val pendingUndo by viewModel.pendingUndo.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(EXPORT_MIME_TYPE)) { uri ->
+        viewModel.onExportTo(uri?.toString())
+    }
+    val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        viewModel.onImportFrom(uri?.toString())
+    }
     Box(modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = { Text(stringResource(R.string.tab_library)) },
+                actions = {
+                    LibraryMenu(
+                        canExport = !state.loading && !state.loadFailed && !state.libraryEmpty,
+                        busy = state.transferring,
+                        onExportAll = { exportLauncher.launch(exportFileName(LocalDate.now())) },
+                        onImport = { importLauncher.launch(IMPORT_MIME_TYPES) },
+                    )
+                },
+            )
+            if (state.transferring) {
+                LinearProgressIndicator(Modifier.fillMaxWidth().testTag(LibraryTestTags.TRANSFERRING))
+            }
             when {
                 state.loading -> Unit
                 state.loadFailed -> Message(stringResource(R.string.library_load_failed), LibraryTestTags.LOAD_FAILED)
@@ -84,6 +113,20 @@ fun LibraryScreen(
             duration = SnackbarDuration.Long,
         )
         if (result == SnackbarResult.ActionPerformed) viewModel.onUndo(recipe) else viewModel.onUndoDismissed(recipe)
+    }
+    state.importResult?.let { ImportSummaryDialog(it, viewModel::onImportResultDismissed) }
+    val exportResult = state.exportResult
+    val exportMessage = when (exportResult) {
+        is RecipeExportResult.Exported -> pluralStringResource(R.plurals.library_exported, exportResult.count, exportResult.count)
+        RecipeExportResult.Failed -> stringResource(R.string.library_export_failed)
+        null -> null
+    }
+    LaunchedEffect(exportResult) {
+        if (exportMessage != null) {
+            // Cleared only once the snackbar is gone: clearing first would change the key and cancel it.
+            snackbarHostState.showSnackbar(exportMessage)
+            viewModel.onExportResultShown()
+        }
     }
     val restoreFailedMessage = stringResource(R.string.recipe_restore_failed)
     LaunchedEffect(state.restoreFailed) {
@@ -192,4 +235,9 @@ object LibraryTestTags {
     const val EMPTY = "library_empty"
     const val NO_MATCH = "library_no_match"
     const val LOAD_FAILED = "library_load_failed"
+    const val MENU = "library_menu"
+    const val EXPORT_ALL = "library_export_all"
+    const val IMPORT = "library_import"
+    const val IMPORT_SUMMARY = "library_import_summary"
+    const val TRANSFERRING = "library_transferring"
 }

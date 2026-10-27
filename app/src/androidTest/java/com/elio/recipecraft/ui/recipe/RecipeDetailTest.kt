@@ -39,6 +39,8 @@ import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.RecipeTranslator
+import com.elio.recipecraft.data.recipe.AndroidRecipeDocuments
+import com.elio.recipecraft.data.recipe.ExportImportService
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.recipe.RecipeTranslations
 import com.elio.recipecraft.data.recipe.toDomain
@@ -156,7 +158,7 @@ class RecipeDetailTest {
 
     private fun setContent() {
         val undoDelete = UndoDelete()
-        val library = LibraryViewModel(repository, undoDelete)
+        val library = LibraryViewModel(repository, undoDelete, ExportImportService(repository, Clock.systemUTC(), Dispatchers.IO), AndroidRecipeDocuments(context))
         compose.setContent {
             RecipeCraftTheme {
                 val navController = rememberNavController()

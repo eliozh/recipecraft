@@ -11,6 +11,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
@@ -67,6 +68,23 @@ class RecipeRepository @Inject constructor(
             recipes.map { it.copy(calories = CalorieCalculator.calculate(it, lookups)).toEntity() }
         }
         dao.upsert(entities)
+    }
+
+    /** Every saved recipe, newest first; recipes created together keep the order they were saved in. */
+    suspend fun all(): List<Recipe> = dao.observe(null, "").first().map { it.toDomain() }
+
+    /**
+     * Saves those of [recipes] whose id is not saved yet, with calories worked out again against
+     * the current tables (the model's own estimate is kept). A saved recipe with the same id is
+     * left exactly as it is. Returns how many recipes were added.
+     */
+    suspend fun insertNew(recipes: List<Recipe>): Int {
+        if (recipes.isEmpty()) return 0
+        val lookups = nutrition.current()
+        val entities = withContext(ioDispatcher) {
+            recipes.map { it.copy(calories = CalorieCalculator.calculate(it, lookups)).toEntity() }
+        }
+        return dao.insertNew(entities).count { it != -1L }
     }
 
     /** The saved versions of those of [ids] that are in the library, by id. */

@@ -22,6 +22,7 @@ import com.elio.recipecraft.data.nutrition.NutritionTableEntity
 import com.elio.recipecraft.data.nutrition.NutritionTableSummary
 import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.recipe.RecipeDao
+import com.elio.recipecraft.data.recipe.RecipeDocuments
 import com.elio.recipecraft.data.recipe.RecipeEntity
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
@@ -31,6 +32,11 @@ import com.elio.recipecraft.domain.AppLanguage
 import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.FileNotFoundException
+import java.io.InputStream
+import java.io.OutputStream
 import java.security.GeneralSecurityException
 import java.time.Clock
 import java.time.Instant
@@ -170,6 +176,22 @@ class FakeRecipeDao : RecipeDao() {
         recipes.fold(all) { acc, recipe ->
             if (acc.any { it.id == recipe.id }) acc.map { if (it.id == recipe.id) recipe else it } else acc + recipe
         }
+    }
+
+    override suspend fun insertNew(recipes: List<RecipeEntity>): List<Long> {
+        val rowIds = mutableListOf<Long>()
+        write { all ->
+            recipes.fold(all) { acc, recipe ->
+                if (acc.any { it.id == recipe.id }) {
+                    rowIds += -1L
+                    acc
+                } else {
+                    rowIds += acc.size + 1L
+                    acc + recipe
+                }
+            }
+        }
+        return rowIds
     }
 
     override suspend fun deleteById(id: String) = write { all -> all.filter { it.id != id } }
@@ -340,4 +362,17 @@ class MutableClock(var instant: Instant) : Clock() {
     override fun instant(): Instant = instant
     override fun getZone(): ZoneId = ZoneOffset.UTC
     override fun withZone(zone: ZoneId): Clock = this
+}
+
+/** Documents held in memory by URI; writing one replaces what it held once the stream closes. */
+class FakeRecipeDocuments : RecipeDocuments {
+    val files = mutableMapOf<String, ByteArray>()
+
+    override fun openInput(uri: String): InputStream = ByteArrayInputStream(files[uri] ?: throw FileNotFoundException(uri))
+
+    override fun openOutput(uri: String): OutputStream = object : ByteArrayOutputStream() {
+        override fun close() {
+            files[uri] = toByteArray()
+        }
+    }
 }

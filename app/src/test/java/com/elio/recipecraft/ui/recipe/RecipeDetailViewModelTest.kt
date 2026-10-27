@@ -13,6 +13,7 @@ import com.elio.recipecraft.data.llm.PromptBuilder
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.RecipeTranslator
 import com.elio.recipecraft.data.llm.TranslationError
+import com.elio.recipecraft.data.recipe.ExportImportService
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.recipe.RecipeTranslations
 import com.elio.recipecraft.data.recipe.toDomain
@@ -22,6 +23,7 @@ import com.elio.recipecraft.testing.FakeLlmClient
 import com.elio.recipecraft.testing.FakeLlmClientFactory
 import com.elio.recipecraft.testing.FakeNutritionLookups
 import com.elio.recipecraft.testing.FakeRecipeDao
+import com.elio.recipecraft.testing.FakeRecipeDocuments
 import com.elio.recipecraft.testing.MutableClock
 import com.elio.recipecraft.testing.ingredient
 import com.elio.recipecraft.testing.lookupOf
@@ -167,7 +169,7 @@ class RecipeDetailViewModelTest {
         saveEggs()
         val before = dao.recipes.single()
         viewModel("a").delete()
-        val library = LibraryViewModel(repository, undoDelete)
+        val library = LibraryViewModel(repository, undoDelete, ExportImportService(repository, Clock.systemUTC(), UnconfinedTestDispatcher()), FakeRecipeDocuments())
         assertTrue(library.uiState.value.libraryEmpty)
 
         library.onUndo(library.pendingUndo.value!!)

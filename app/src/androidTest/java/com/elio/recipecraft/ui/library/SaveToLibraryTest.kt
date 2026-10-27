@@ -34,6 +34,8 @@ import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.recipe.AndroidRecipeDocuments
+import com.elio.recipecraft.data.recipe.ExportImportService
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
@@ -98,7 +100,7 @@ class SaveToLibraryTest {
             recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, noTables, Clock.systemUTC()),
             chats = ChatRepository(database.chats(), Clock.systemUTC(), Dispatchers.IO),
         )
-        val library = LibraryViewModel(repository, UndoDelete())
+        val library = LibraryViewModel(repository, UndoDelete(), ExportImportService(repository, Clock.systemUTC(), Dispatchers.IO), AndroidRecipeDocuments(context))
         compose.setContent {
             RecipeCraftTheme {
                 if (showLibrary) {

@@ -36,6 +36,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -80,6 +81,7 @@ fun RecipeDetailScreen(
     val currentOnDeleted by rememberUpdatedState(onDeleted)
     val currentOnOpenRecipe by rememberUpdatedState(onOpenRecipe)
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     val replacedMessage = stringResource(R.string.recipe_replaced)
     val copiedMessage = stringResource(R.string.recipe_saved_as_copy)
     val openLabel = stringResource(R.string.action_open)
@@ -149,7 +151,14 @@ fun RecipeDetailScreen(
                             Text(stringResource(R.string.action_translate))
                         }
                     }
-                    if (state.recipe != null) {
+                    val shown = state.recipe
+                    if (shown != null) {
+                        IconButton(
+                            onClick = { shareRecipe(context, shown) },
+                            modifier = Modifier.testTag(RecipeDetailTestTags.SHARE),
+                        ) {
+                            Icon(painterResource(R.drawable.ic_share), contentDescription = stringResource(R.string.recipe_share))
+                        }
                         IconButton(
                             onClick = viewModel::delete,
                             enabled = !state.deleting,
@@ -347,6 +356,7 @@ object RecipeDetailTestTags {
     const val SCREEN = "recipe_detail"
     const val BACK = "recipe_detail_back"
     const val DELETE = "recipe_detail_delete"
+    const val SHARE = "recipe_detail_share"
     const val TRANSLATE = "recipe_detail_translate"
     const val TRANSLATING = "recipe_detail_translating"
     const val MODIFY = "recipe_detail_modify"

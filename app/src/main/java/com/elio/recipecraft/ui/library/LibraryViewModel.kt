@@ -2,6 +2,10 @@ package com.elio.recipecraft.ui.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.elio.recipecraft.data.recipe.ExportImportService
+import com.elio.recipecraft.data.recipe.RecipeDocuments
+import com.elio.recipecraft.data.recipe.RecipeExportResult
+import com.elio.recipecraft.data.recipe.RecipeImportResult
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
@@ -34,12 +38,20 @@ data class LibraryUiState(
     val loadFailed: Boolean = false,
     /** Putting back a deleted recipe failed; shown once, then cleared by [LibraryViewModel.onRestoreFailedShown]. */
     val restoreFailed: Boolean = false,
+    /** True while an export or import runs. */
+    val transferring: Boolean = false,
+    /** The last export's outcome, until the screen has shown it. */
+    val exportResult: RecipeExportResult? = null,
+    /** The last import's summary, until the user dismisses it. */
+    val importResult: RecipeImportResult? = null,
 )
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repository: RecipeRepository,
     private val undoDelete: UndoDelete,
+    private val exportImport: ExportImportService,
+    private val documents: RecipeDocuments,
 ) : ViewModel() {
 
     /** The recipe just deleted from its detail screen, while its "Recipe deleted" snackbar can still undo it. */
@@ -81,6 +93,42 @@ class LibraryViewModel @Inject constructor(
 
     fun onRestoreFailedShown() {
         _uiState.update { it.copy(restoreFailed = false) }
+    }
+
+    /** Export all: writes every saved recipe to [uri]; null when the user backed out of the picker. */
+    fun onExportTo(uri: String?) {
+        if (uri == null || !startTransfer()) return
+        viewModelScope.launch {
+            val result = exportImport.export { documents.openOutput(uri) }
+            _uiState.update { it.copy(transferring = false, exportResult = result) }
+        }
+    }
+
+    /** Import: adds the recipes of the export at [uri]; null when the user backed out of the picker. */
+    fun onImportFrom(uri: String?) {
+        if (uri == null || !startTransfer()) return
+        viewModelScope.launch {
+            val result = exportImport.import { documents.openInput(uri) }
+            _uiState.update { it.copy(transferring = false, importResult = result) }
+        }
+    }
+
+    fun onExportResultShown() {
+        _uiState.update { it.copy(exportResult = null) }
+    }
+
+    fun onImportResultDismissed() {
+        _uiState.update { it.copy(importResult = null) }
+    }
+
+    /** Marks a transfer as running; false when one already is. */
+    private fun startTransfer(): Boolean {
+        var started = false
+        _uiState.update { state ->
+            started = !state.transferring
+            if (started) state.copy(transferring = true, exportResult = null, importResult = null) else state
+        }
+        return started
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

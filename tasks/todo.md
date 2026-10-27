@@ -22,7 +22,7 @@
 - [ ] Checkpoint B: full flow end to end including translation and CSV calorie matching; human review
 
 ## Phase 3: Devices and polish
-- [ ] T16 Export, import, and share
+- [x] T16 Export, import, and share
 - [ ] T17 Adaptive and full-screen layouts and Android 17 compliance
 - [ ] T18 Samsung Z Flip 8 cover-screen layout and Cook mode (real device)
 - [ ] T19 Error messages and accessibility

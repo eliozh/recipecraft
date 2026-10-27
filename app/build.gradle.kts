@@ -46,6 +46,14 @@ android {
         compose = true
     }
 
+    bundle {
+        // A shared recipe uses its own language's strings, whatever the device language, so every
+        // install needs both languages.
+        language {
+            enableSplit = false
+        }
+    }
+
     sourceSets {
         // The Compose tests render the same synthetic LLM replies the JVM tests parse.
         getByName("androidTest").resources.directories.add("src/test/resources")
@@ -115,6 +123,8 @@ kover {
                     "com.elio.recipecraft.data.chat.ChatDao_Impl*",
                     // A thin wrapper over the ContentResolver; the manual SAF import covers it.
                     "com.elio.recipecraft.data.nutrition.AndroidCsvDocuments*",
+                    // The same for export files; ExportImportTest and the manual SAF export cover it.
+                    "com.elio.recipecraft.data.recipe.AndroidRecipeDocuments*",
                 )
             }
         }

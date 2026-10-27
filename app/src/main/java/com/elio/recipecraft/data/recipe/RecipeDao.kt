@@ -1,6 +1,8 @@
 package com.elio.recipecraft.data.recipe
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
@@ -52,6 +54,13 @@ abstract class RecipeDao {
     /** Inserts new recipes and replaces saved ones with the same id, so saving twice never duplicates. */
     @Upsert
     abstract suspend fun upsert(recipes: List<RecipeEntity>)
+
+    /**
+     * Inserts the recipes whose id is not saved yet and leaves saved ones as they are. Returns each
+     * recipe's rowid in order, or -1 for one that was skipped.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertNew(recipes: List<RecipeEntity>): List<Long>
 
     @Query("DELETE FROM recipes WHERE id = :id")
     abstract suspend fun deleteById(id: String)

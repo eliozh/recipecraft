@@ -285,4 +285,29 @@
     <string name="preset_make_vegetarian_text">Make the recipes above vegetarian.</string>
     <string name="preset_under_500">Under 500 kcal</string>
     <string name="preset_under_500_text">Change the recipes above so each is under 500 kcal per serving.</string>
+    <string name="library_more_options">More options</string>
+    <string name="library_export_all">Export all</string>
+    <plurals name="library_exported">
+        <item quantity="one">Exported %1$d recipe.</item>
+        <item quantity="other">Exported %1$d recipes.</item>
+    </plurals>
+    <string name="library_export_failed">Couldn\'t write the export file. Try again.</string>
+    <string name="library_import_title">Import recipes</string>
+    <plurals name="library_import_imported">
+        <item quantity="one">%1$d recipe added to your library.</item>
+        <item quantity="other">%1$d recipes added to your library.</item>
+    </plurals>
+    <plurals name="library_import_duplicates">
+        <item quantity="one">%1$d recipe is already in your library and was kept as it is.</item>
+        <item quantity="other">%1$d recipes are already in your library and were kept as they are.</item>
+    </plurals>
+    <plurals name="library_import_invalid">
+        <item quantity="one">%1$d recipe was skipped because it is incomplete or unreadable.</item>
+        <item quantity="other">%1$d recipes were skipped because they are incomplete or unreadable.</item>
+    </plurals>
+    <string name="recipe_import_error_too_large">The file is larger than 20 MB.</string>
+    <string name="recipe_import_error_not_an_export">This isn\'t a RecipeCraft export file.</string>
+    <string name="recipe_import_error_newer_version">This file was exported by a newer version of RecipeCraft. Update the app to import it.</string>
+    <string name="recipe_import_error_save_failed">Couldn\'t save the recipes. Try again.</string>
+    <string name="recipe_share">Share</string>
 </resources>

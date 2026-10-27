@@ -270,4 +270,25 @@
     <string name="preset_make_vegetarian_text">把上面的食谱改成素食。</string>
     <string name="preset_under_500">500 千卡以内</string>
     <string name="preset_under_500_text">调整上面的食谱，让每道每份不超过 500 千卡。</string>
+    <string name="library_more_options">更多选项</string>
+    <string name="library_export_all">全部导出</string>
+    <plurals name="library_exported">
+        <item quantity="other">已导出 %1$d 个食谱。</item>
+    </plurals>
+    <string name="library_export_failed">无法写入导出文件，请重试。</string>
+    <string name="library_import_title">导入食谱</string>
+    <plurals name="library_import_imported">
+        <item quantity="other">已将 %1$d 个食谱加入食谱库。</item>
+    </plurals>
+    <plurals name="library_import_duplicates">
+        <item quantity="other">%1$d 个食谱已在食谱库中，保持原样。</item>
+    </plurals>
+    <plurals name="library_import_invalid">
+        <item quantity="other">%1$d 个食谱不完整或无法读取，已跳过。</item>
+    </plurals>
+    <string name="recipe_import_error_too_large">文件超过 20 MB。</string>
+    <string name="recipe_import_error_not_an_export">这不是 RecipeCraft 导出的文件。</string>
+    <string name="recipe_import_error_newer_version">此文件由更新版本的 RecipeCraft 导出，请更新应用后再导入。</string>
+    <string name="recipe_import_error_save_failed">无法保存食谱，请重试。</string>
+    <string name="recipe_share">分享</string>
 </resources>
