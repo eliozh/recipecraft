@@ -37,6 +37,7 @@ import com.elio.recipecraft.ui.theme.RecipeCraftTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -64,6 +65,7 @@ class ChatScreenTest {
             assembler = RecipeAssembler(Clock.systemUTC()),
             nutrition = object : NutritionLookups {
                 override suspend fun current() = emptyList<NutritionLookup>()
+                override fun observe() = flowOf(emptyList<NutritionLookup>())
             },
         )
         compose.setContent {

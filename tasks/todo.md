@@ -11,7 +11,7 @@
 - [ ] Checkpoint A: tests, build, lint, and Kover pass; recipe card works with 3 providers × 2 languages; calorie source correct; human review
 
 ## Phase 2: Core features
-- [ ] T8 Import your own nutrition tables (creates AppDatabase; CSV import, Settings > Nutrition tables)
+- [x] T8 Import your own nutrition tables (creates AppDatabase; CSV import, Settings > Nutrition tables)
 - [ ] T9 Generation composer for full-day sets, single meals, and a count (can run in parallel with T8)
 - [ ] T10 Save recipes and browse the library (filter, search; after T8)
 - [ ] T11 Recipe detail screen and delete with undo

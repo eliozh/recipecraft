@@ -106,6 +106,11 @@ kover {
                     // Room's database class and its generated code; UsdaDatabaseInstrumentedTest opens the real asset.
                     "com.elio.recipecraft.data.nutrition.UsdaDatabase*",
                     "com.elio.recipecraft.data.nutrition.UsdaFoodDao_Impl*",
+                    // AppDatabase and its generated code; NutritionTableDaoTest runs them on a device.
+                    "com.elio.recipecraft.data.AppDatabase*",
+                    "com.elio.recipecraft.data.nutrition.NutritionTableDao_Impl*",
+                    // A thin wrapper over the ContentResolver; the manual SAF import covers it.
+                    "com.elio.recipecraft.data.nutrition.AndroidCsvDocuments*",
                 )
             }
         }

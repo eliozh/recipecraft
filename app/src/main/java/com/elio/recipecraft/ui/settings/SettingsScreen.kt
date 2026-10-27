@@ -46,5 +46,7 @@ fun SettingsScreen(
             onModelPicked = viewModel::onModelPicked,
             onDismissModelPicker = viewModel::onDismissModelPicker,
         )
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+        NutritionTablesSection()
     }
 }

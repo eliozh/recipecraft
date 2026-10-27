@@ -93,4 +93,49 @@
     <string name="meal_dinner">Dinner</string>
     <string name="meal_snack">Snack</string>
     <string name="meal_dessert">Dessert</string>
+    <string name="settings_nutrition_tables">Nutrition tables</string>
+    <string name="nutrition_tables_hint">Imported tables are matched before the built-in USDA table: on the Chinese name in Chinese recipes and on the English name in English ones. Only import a table you are entitled to use. It stays on this device.</string>
+    <string name="nutrition_tables_format">CSV in UTF-8 with the header row name,aliases,kcal_per_100g</string>
+    <string name="nutrition_tables_import">Import CSV</string>
+    <string name="nutrition_tables_importing">Importing…</string>
+    <string name="nutrition_tables_empty">No tables imported yet.</string>
+    <plurals name="nutrition_tables_food_count">
+        <item quantity="one">%1$d food</item>
+        <item quantity="other">%1$d foods</item>
+    </plurals>
+    <string name="nutrition_tables_move_up">Move %1$s up</string>
+    <string name="nutrition_tables_move_down">Move %1$s down</string>
+    <string name="nutrition_tables_delete">Delete %1$s</string>
+    <string name="nutrition_tables_delete_title">Delete this table?</string>
+    <string name="nutrition_tables_delete_message">“%1$s” will be removed from this device, and calories will come from the remaining tables.</string>
+    <string name="nutrition_tables_name_title">Name this table</string>
+    <string name="nutrition_tables_name_label">Table name</string>
+    <plurals name="nutrition_tables_imported">
+        <item quantity="one">Imported %1$d food into “%2$s”.</item>
+        <item quantity="other">Imported %1$d foods into “%2$s”.</item>
+    </plurals>
+    <plurals name="nutrition_tables_skipped">
+        <item quantity="one">Skipped %1$d row.</item>
+        <item quantity="other">Skipped %1$d rows.</item>
+    </plurals>
+    <!-- row number, reason -->
+    <string name="nutrition_tables_row_problem">Row %1$d: %2$s</string>
+    <string name="row_error_wrong_column_count">needs exactly 3 columns</string>
+    <string name="row_error_missing_name">the name is missing</string>
+    <string name="row_error_invalid_kcal">kcal_per_100g must be a number, 0 or more</string>
+    <string name="row_error_kcal_too_high">kcal_per_100g is over 1000</string>
+    <string name="row_error_duplicate_name">repeats an earlier name</string>
+    <string name="row_error_bad_quotes">has unmatched quotes</string>
+    <string name="import_error_empty">The file is empty.</string>
+    <string name="import_error_wrong_header">The first row must be exactly: name,aliases,kcal_per_100g</string>
+    <string name="import_error_too_large">The file is larger than 5 MB.</string>
+    <string name="import_error_not_utf8">The file isn\'t UTF-8 text. Save it as “CSV UTF-8” and try again.</string>
+    <string name="import_error_no_valid_rows">No row was valid, so nothing was imported.</string>
+    <string name="import_error_unreadable">Couldn\'t read the file.</string>
+    <string name="import_error_save_failed">Couldn\'t save the table. Try again.</string>
+    <string name="nutrition_tables_action_failed">Couldn\'t update your tables. Try again.</string>
+    <string name="nutrition_tables_load_failed">Couldn\'t load your tables.</string>
+    <string name="action_import">Import</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_dismiss">Dismiss</string>
 </resources>

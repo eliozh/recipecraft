@@ -11,8 +11,12 @@ import com.elio.recipecraft.data.llm.LlmRequest
 import com.elio.recipecraft.data.llm.ModelListResult
 import com.elio.recipecraft.data.nutrition.IngredientMatcher
 import com.elio.recipecraft.data.nutrition.NutritionFood
+import com.elio.recipecraft.data.nutrition.NutritionFoodEntity
 import com.elio.recipecraft.data.nutrition.NutritionLookup
 import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.nutrition.NutritionTableDao
+import com.elio.recipecraft.data.nutrition.NutritionTableEntity
+import com.elio.recipecraft.data.nutrition.NutritionTableSummary
 import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.settings.AppLanguageSettings
 import com.elio.recipecraft.data.settings.ProviderConfig
@@ -25,6 +29,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.receiveAsFlow
 
@@ -96,6 +103,84 @@ class FakeLlmClientFactory(var result: LlmClientResult) : LlmClientFactory {
 
 class FakeNutritionLookups(var lookups: List<NutritionLookup> = emptyList()) : NutritionLookups {
     override suspend fun current(): List<NutritionLookup> = lookups
+
+    override fun observe(): Flow<List<NutritionLookup>> = flow { emit(lookups) }
+}
+
+/**
+ * An in-memory [NutritionTableDao]. It inherits the real transaction methods, and like Room it
+ * publishes their writes together, so observers never see a table without its foods.
+ */
+class FakeNutritionTableDao : NutritionTableDao() {
+    private data class Snapshot(val tables: List<NutritionTableEntity>, val foods: List<NutritionFoodEntity>)
+
+    private val state = MutableStateFlow(Snapshot(emptyList(), emptyList()))
+    private var draft = state.value
+    private var transactionDepth = 0
+    private var nextId = 1L
+
+    var foodReads = 0
+    var failReads = false
+    var failWrites = false
+
+    val tables: List<NutritionTableEntity> get() = state.value.tables
+    val foods: List<NutritionFoodEntity> get() = state.value.foods
+
+    override fun observeTables(): Flow<List<NutritionTableSummary>> = state
+        .onStart { if (failReads) throw IllegalStateException("database unreadable") }
+        .map { snapshot ->
+            snapshot.tables.sortedWith(compareBy({ it.priority }, { it.id })).map { table ->
+                NutritionTableSummary(table.id, table.name, table.priority, table.importedAt, snapshot.foods.count { it.tableId == table.id })
+            }
+        }
+
+    override suspend fun foods(tableId: Long): List<NutritionFoodEntity> {
+        foodReads++
+        return state.value.foods.filter { it.tableId == tableId }
+    }
+
+    override suspend fun tableIdsInOrder(): List<Long> = draft.tables.sortedWith(compareBy({ it.priority }, { it.id })).map { it.id }
+
+    override suspend fun maxPriority(): Int? = draft.tables.maxOfOrNull { it.priority }
+
+    override suspend fun insertTable(table: NutritionTableEntity): Long {
+        val id = nextId++
+        write { it.copy(tables = it.tables + table.copy(id = id)) }
+        return id
+    }
+
+    override suspend fun insertFoods(foods: List<NutritionFoodEntity>) = write { it.copy(foods = it.foods + foods) }
+
+    override suspend fun setPriority(id: Long, priority: Int) = write { snapshot ->
+        snapshot.copy(tables = snapshot.tables.map { if (it.id == id) it.copy(priority = priority) else it })
+    }
+
+    override suspend fun deleteTable(id: Long) = write { snapshot ->
+        Snapshot(snapshot.tables.filter { it.id != id }, snapshot.foods.filter { it.tableId != id })
+    }
+
+    override suspend fun insertTableWithFoods(name: String, importedAt: Long, foods: List<NutritionFood>): Long =
+        transaction { super.insertTableWithFoods(name, importedAt, foods) }
+
+    override suspend fun setOrder(ids: List<Long>) = transaction { super.setOrder(ids) }
+
+    private inline fun <T> transaction(block: () -> T): T {
+        transactionDepth++
+        try {
+            return block().also { if (transactionDepth == 1) state.value = draft }
+        } catch (e: Throwable) {
+            draft = state.value // roll back
+            throw e
+        } finally {
+            transactionDepth--
+        }
+    }
+
+    private fun write(change: (Snapshot) -> Snapshot) {
+        if (failWrites) throw IllegalStateException("disk full")
+        draft = change(draft)
+        if (transactionDepth == 0) state.value = draft
+    }
 }
 
 /** The kcal per 100 g that the bundled usda.db holds for the ingredients of the en_breakfast oatmeal fixture. */

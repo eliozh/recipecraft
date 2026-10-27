@@ -90,4 +90,46 @@
     <string name="meal_dinner">晚餐</string>
     <string name="meal_snack">加餐</string>
     <string name="meal_dessert">甜点</string>
+    <string name="settings_nutrition_tables">营养成分表</string>
+    <string name="nutrition_tables_hint">导入的表优先于内置的 USDA 表使用：中文食谱按中文名匹配，英文食谱按英文名匹配。请只导入你有权使用的表。表格只保存在本机。</string>
+    <string name="nutrition_tables_format">UTF-8 编码的 CSV，表头为 name,aliases,kcal_per_100g</string>
+    <string name="nutrition_tables_import">导入 CSV</string>
+    <string name="nutrition_tables_importing">正在导入…</string>
+    <string name="nutrition_tables_empty">还没有导入任何表。</string>
+    <plurals name="nutrition_tables_food_count">
+        <item quantity="other">%1$d 种食物</item>
+    </plurals>
+    <string name="nutrition_tables_move_up">上移 %1$s</string>
+    <string name="nutrition_tables_move_down">下移 %1$s</string>
+    <string name="nutrition_tables_delete">删除 %1$s</string>
+    <string name="nutrition_tables_delete_title">删除这张表？</string>
+    <string name="nutrition_tables_delete_message">“%1$s”将从本机删除，热量将改用其余的表计算。</string>
+    <string name="nutrition_tables_name_title">为这张表命名</string>
+    <string name="nutrition_tables_name_label">表名</string>
+    <plurals name="nutrition_tables_imported">
+        <item quantity="other">已向“%2$s”导入 %1$d 种食物。</item>
+    </plurals>
+    <plurals name="nutrition_tables_skipped">
+        <item quantity="other">跳过了 %1$d 行。</item>
+    </plurals>
+    <!-- row number, reason -->
+    <string name="nutrition_tables_row_problem">第 %1$d 行：%2$s</string>
+    <string name="row_error_wrong_column_count">必须正好有 3 列</string>
+    <string name="row_error_missing_name">缺少名称</string>
+    <string name="row_error_invalid_kcal">kcal_per_100g 必须是不小于 0 的数字</string>
+    <string name="row_error_kcal_too_high">kcal_per_100g 超过 1000</string>
+    <string name="row_error_duplicate_name">与前面的名称重复</string>
+    <string name="row_error_bad_quotes">引号不配对</string>
+    <string name="import_error_empty">文件是空的。</string>
+    <string name="import_error_wrong_header">第一行必须是：name,aliases,kcal_per_100g</string>
+    <string name="import_error_too_large">文件超过 5 MB。</string>
+    <string name="import_error_not_utf8">文件不是 UTF-8 编码。请另存为“CSV UTF-8”后重试。</string>
+    <string name="import_error_no_valid_rows">没有有效的行，未导入任何内容。</string>
+    <string name="import_error_unreadable">无法读取文件。</string>
+    <string name="import_error_save_failed">无法保存这张表，请重试。</string>
+    <string name="nutrition_tables_action_failed">无法更新营养成分表，请重试。</string>
+    <string name="nutrition_tables_load_failed">无法读取营养成分表。</string>
+    <string name="action_import">导入</string>
+    <string name="action_delete">删除</string>
+    <string name="action_dismiss">关闭</string>
 </resources>

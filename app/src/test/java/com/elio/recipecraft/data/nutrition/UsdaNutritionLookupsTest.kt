@@ -3,6 +3,7 @@ package com.elio.recipecraft.data.nutrition
 import com.elio.recipecraft.domain.Ingredient
 import com.elio.recipecraft.domain.Language
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -45,5 +46,11 @@ class UsdaNutritionLookupsTest {
         dao.fail = false
         assertEquals(1, lookups.current().size)
         assertEquals(2, dao.calls)
+    }
+
+    @Test
+    fun `observe emits the table once`() = runTest {
+        val lookups = UsdaNutritionLookups(FakeDao(listOf(UsdaFoodEntity("egg", "", 143.0, 171287))), UnconfinedTestDispatcher(testScheduler))
+        assertEquals(listOf(1), lookups.observe().toList().map { it.size })
     }
 }

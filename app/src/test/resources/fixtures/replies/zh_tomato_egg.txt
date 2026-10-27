@@ -1,0 +1,25 @@
+家常的番茄炒蛋，十五分钟上桌。
+```json
+{
+  "recipes": [
+    {
+      "name": "番茄炒蛋",
+      "mealType": "lunch",
+      "servings": 2,
+      "aiKcal": 420,
+      "ingredients": [
+        { "name": "番茄", "nameEn": "tomato", "quantity": "2", "unit": "个", "grams": 300, "aiKcal": 54 },
+        { "name": "鸡蛋", "nameEn": "egg", "quantity": "3", "unit": "个", "grams": 150, "aiKcal": 215 },
+        { "name": "食用油", "nameEn": "vegetable oil", "quantity": "1", "unit": "汤匙", "grams": 15, "aiKcal": 133 },
+        { "name": "盐", "nameEn": "salt", "quantity": "2", "unit": "克", "grams": 2, "aiKcal": 0 }
+      ],
+      "tools": ["炒锅", "锅铲", "碗"],
+      "steps": [
+        { "text": "番茄切块，鸡蛋打散。", "minutes": 3 },
+        { "text": "热锅下油，倒入蛋液炒至凝固后盛出。", "minutes": 2 },
+        { "text": "锅中留底油，下番茄炒出汁，倒回鸡蛋，加盐翻匀。", "minutes": 5 }
+      ]
+    }
+  ]
+}
+```
