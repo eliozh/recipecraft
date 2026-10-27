@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -79,10 +81,11 @@ fun GenerationComposer(
                     modifier = Modifier.rotate(if (state.expanded) 180f else 0f),
                 )
             }
-            AnimatedVisibility(state.expanded) {
+            // Scrolls when the panel gets less height than it needs, as in a short window.
+            AnimatedVisibility(state.expanded, Modifier.weight(1f, fill = false)) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.padding(bottom = 12.dp),
+                    modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = 12.dp),
                 ) {
                     ScopePicker(state.scope, onScopeChanged)
                     CountStepper(state, onCountChanged)

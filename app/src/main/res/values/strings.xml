@@ -10,6 +10,7 @@
     <string name="library_load_failed">Couldn\'t load your recipes.</string>
     <string name="library_search_hint">Search recipes or ingredients</string>
     <string name="library_filter_all">All</string>
+    <string name="library_select_recipe">Pick a recipe to see it here.</string>
     <string name="recipe_save">Save</string>
     <string name="recipe_saved">Saved</string>
     <string name="recipe_save_all">Save all</string>

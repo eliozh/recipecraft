@@ -5,15 +5,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.elio.recipecraft.R
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     modifier: Modifier = Modifier,
@@ -24,11 +30,19 @@ fun SettingsScreen(
         viewModel.onResume()
         onPauseOrDispose { }
     }
+    Column(modifier.fillMaxSize()) {
+        TopAppBar(title = { Text(stringResource(R.string.tab_settings)) })
+        SettingsContent(uiState, viewModel)
+    }
+}
+
+@Composable
+private fun SettingsContent(uiState: SettingsUiState, viewModel: SettingsViewModel) {
     Column(
-        modifier
+        Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 16.dp),
+            .padding(bottom = 16.dp),
     ) {
         LanguagePicker(selected = uiState.language, onSelect = viewModel::onLanguageSelected)
         HorizontalDivider(Modifier.padding(vertical = 16.dp))

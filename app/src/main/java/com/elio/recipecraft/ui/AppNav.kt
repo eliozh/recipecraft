@@ -3,21 +3,20 @@ package com.elio.recipecraft.ui
 import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
+import androidx.core.os.bundleOf
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.hilt.lifecycle.viewmodel.compose.rememberHiltViewModelFactory
+import androidx.lifecycle.DEFAULT_ARGS_KEY
+import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.MutableCreationExtras
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -29,13 +28,14 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.elio.recipecraft.R
 import com.elio.recipecraft.ui.chat.ChatScreen
+import com.elio.recipecraft.ui.library.LibraryListDetail
 import com.elio.recipecraft.ui.library.LibraryScreen
 import com.elio.recipecraft.ui.library.LibraryViewModel
 import com.elio.recipecraft.ui.recipe.RecipeDetailScreen
 import com.elio.recipecraft.ui.recipe.RecipeDetailViewModel
 import com.elio.recipecraft.ui.settings.SettingsScreen
 
-/** Top-level destinations shown in the bottom navigation bar. */
+/** Top-level destinations shown in the bottom navigation bar or the navigation rail. */
 enum class TopLevelDestination(
     val route: String,
     @param:StringRes val labelRes: Int,
@@ -53,27 +53,12 @@ fun AppNav() {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
 
-    Scaffold(
-        bottomBar = {
-            NavigationBar {
-                TopLevelDestination.entries.forEach { destination ->
-                    val selected = currentDestination?.hierarchy?.any { it.route == destination.route } == true
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { navController.navigateToTopLevel(destination) },
-                        icon = { Icon(painterResource(destination.iconRes), contentDescription = null) },
-                        label = { Text(stringResource(destination.labelRes)) },
-                    )
-                }
-            }
-        },
-    ) { innerPadding ->
-        NavHost(
-            navController = navController,
-            startDestination = TopLevelDestination.CHAT.route,
-            // Consumed so screens that add imePadding don't count the bottom bar twice.
-            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
-        ) {
+    AdaptiveScaffold(
+        layout = currentAppLayout(),
+        isSelected = { destination -> currentDestination?.hierarchy?.any { it.route == destination.route } == true },
+        onSelect = navController::navigateToTopLevel,
+    ) {
+        NavHost(navController = navController, startDestination = TopLevelDestination.CHAT.route) {
             composable(TopLevelDestination.CHAT.route) {
                 ChatScreen(onOpenSettings = { navController.navigateToTopLevel(TopLevelDestination.SETTINGS) })
             }
@@ -84,7 +69,9 @@ fun AppNav() {
 }
 
 /**
- * The Library tab: the list, and the detail screen of a recipe opened from it. The view models are
+ * The Library tab: the list, and the detail screen of a recipe opened from it. A wide window shows
+ * both side by side on the list's route, with the open recipe kept in that entry's saved state;
+ * resizing moves an open recipe between the pane and its own screen. The view models are
  * parameters so tests can supply their own.
  */
 internal fun NavGraphBuilder.libraryGraph(
@@ -92,19 +79,46 @@ internal fun NavGraphBuilder.libraryGraph(
     onOpenChat: () -> Unit,
     libraryViewModel: @Composable () -> LibraryViewModel = { hiltViewModel() },
     detailViewModel: @Composable () -> RecipeDetailViewModel = { hiltViewModel() },
+    paneDetailViewModel: @Composable (recipeId: String) -> RecipeDetailViewModel = { id -> hiltPaneDetailViewModel(id) },
 ) {
     navigation(startDestination = LIBRARY_ROUTE, route = TopLevelDestination.LIBRARY.route) {
-        composable(LIBRARY_ROUTE) {
-            LibraryScreen(
-                onOpenChat = onOpenChat,
-                onOpenRecipe = { id -> navController.navigate(recipeDetailRoute(id)) },
-                viewModel = libraryViewModel(),
-            )
+        composable(LIBRARY_ROUTE) { entry ->
+            val selectedId by entry.savedStateHandle.getStateFlow<String?>(SELECTED_RECIPE_KEY, null)
+                .collectAsStateWithLifecycle()
+            if (LocalAppLayout.current.listDetail) {
+                LibraryListDetail(
+                    selectedId = selectedId,
+                    onSelect = { id -> entry.savedStateHandle[SELECTED_RECIPE_KEY] = id },
+                    onOpenChat = onOpenChat,
+                    libraryViewModel = libraryViewModel(),
+                    detailViewModel = paneDetailViewModel,
+                )
+            } else {
+                // The window got narrow with a recipe open beside the list: open it on its own screen.
+                LaunchedEffect(selectedId) {
+                    val id = selectedId ?: return@LaunchedEffect
+                    entry.savedStateHandle[SELECTED_RECIPE_KEY] = null
+                    navController.navigate(recipeDetailRoute(id))
+                }
+                LibraryScreen(
+                    onOpenChat = onOpenChat,
+                    onOpenRecipe = { id -> navController.navigate(recipeDetailRoute(id)) },
+                    viewModel = libraryViewModel(),
+                )
+            }
         }
         composable(
             RECIPE_DETAIL_ROUTE,
             arguments = listOf(navArgument(RecipeDetailViewModel.ARG_RECIPE_ID) { type = NavType.StringType }),
-        ) {
+        ) { entry ->
+            if (LocalAppLayout.current.listDetail) {
+                // The window got wide: show this recipe beside the list instead.
+                LaunchedEffect(Unit) {
+                    val id = entry.arguments?.getString(RecipeDetailViewModel.ARG_RECIPE_ID)
+                    navController.getBackStackEntry(LIBRARY_ROUTE).savedStateHandle[SELECTED_RECIPE_KEY] = id
+                    navController.popBackStack(LIBRARY_ROUTE, inclusive = false)
+                }
+            }
             RecipeDetailScreen(
                 onBack = { navController.popBackStack() },
                 // The library under it is still on the back stack, with its filter and search.
@@ -116,7 +130,26 @@ internal fun NavGraphBuilder.libraryGraph(
     }
 }
 
+/**
+ * A detail view model for the pane, one per recipe, kept by the library's back stack entry. The
+ * recipe id goes in as the default arguments, where the detail route would put it.
+ */
+@Composable
+private fun hiltPaneDetailViewModel(recipeId: String): RecipeDetailViewModel {
+    val owner = checkNotNull(LocalViewModelStoreOwner.current) { "No ViewModelStoreOwner" }
+    val defaults = owner as HasDefaultViewModelProviderFactory
+    return viewModel(
+        viewModelStoreOwner = owner,
+        key = "recipe_detail_pane/$recipeId",
+        factory = rememberHiltViewModelFactory(defaults.defaultViewModelProviderFactory),
+        extras = MutableCreationExtras(defaults.defaultViewModelCreationExtras).apply {
+            set(DEFAULT_ARGS_KEY, bundleOf(RecipeDetailViewModel.ARG_RECIPE_ID to recipeId))
+        },
+    )
+}
+
 private const val LIBRARY_ROUTE = "library"
+private const val SELECTED_RECIPE_KEY = "selected_recipe"
 private const val RECIPE_DETAIL_ROUTE = "recipe/{${RecipeDetailViewModel.ARG_RECIPE_ID}}"
 
 private fun recipeDetailRoute(id: String) = "recipe/${Uri.encode(id)}"

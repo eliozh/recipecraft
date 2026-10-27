@@ -1,6 +1,9 @@
 package com.elio.recipecraft.ui.recipe
 
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -21,11 +24,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.AppDatabase
-import com.elio.recipecraft.data.nutrition.IngredientMatcher
-import com.elio.recipecraft.data.nutrition.NutritionFood
-import com.elio.recipecraft.data.nutrition.NutritionLookup
-import com.elio.recipecraft.data.nutrition.NutritionLookups
-import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.llm.AndroidAssetReader
 import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
@@ -39,6 +37,11 @@ import com.elio.recipecraft.data.llm.RecipeAssembler
 import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.RecipeTranslator
+import com.elio.recipecraft.data.nutrition.IngredientMatcher
+import com.elio.recipecraft.data.nutrition.NutritionFood
+import com.elio.recipecraft.data.nutrition.NutritionLookup
+import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.nutrition.TableLookup
 import com.elio.recipecraft.data.recipe.AndroidRecipeDocuments
 import com.elio.recipecraft.data.recipe.ExportImportService
 import com.elio.recipecraft.data.recipe.RecipeRepository
@@ -54,6 +57,9 @@ import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.domain.Step
+import com.elio.recipecraft.ui.AppLayout
+import com.elio.recipecraft.ui.LocalAppLayout
+import com.elio.recipecraft.ui.NavigationType
 import com.elio.recipecraft.ui.TopLevelDestination
 import com.elio.recipecraft.ui.chat.ModifySheetTestTags
 import com.elio.recipecraft.ui.library.LibraryTestTags
@@ -156,19 +162,27 @@ class RecipeDetailTest {
         RecipeModifier(ready, promptBuilder, RecipeParser(), RecipeAssembler(Clock.systemUTC()), eggsOnly, Clock.systemUTC())
     }
 
-    private fun setContent() {
+    private fun setContent(layout: AppLayout = AppLayout.Compact) {
         val undoDelete = UndoDelete()
         val library = LibraryViewModel(repository, undoDelete, ExportImportService(repository, Clock.systemUTC(), Dispatchers.IO), AndroidRecipeDocuments(context))
         compose.setContent {
             RecipeCraftTheme {
-                val navController = rememberNavController()
-                NavHost(navController, startDestination = TopLevelDestination.LIBRARY.route) {
-                    libraryGraph(
-                        navController,
-                        onOpenChat = {},
-                        libraryViewModel = { library },
-                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations, modifier, Clock.systemUTC()) } },
-                    )
+                CompositionLocalProvider(LocalAppLayout provides layout) {
+                    val navController = rememberNavController()
+                    NavHost(navController, startDestination = TopLevelDestination.LIBRARY.route) {
+                        libraryGraph(
+                            navController,
+                            onOpenChat = {},
+                            libraryViewModel = { library },
+                            detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations, modifier, Clock.systemUTC()) } },
+                            paneDetailViewModel = { id ->
+                                viewModel(key = id) {
+                                    val args = SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to id))
+                                    RecipeDetailViewModel(args, repository, undoDelete, english, translations, modifier, Clock.systemUTC())
+                                }
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -237,6 +251,44 @@ class RecipeDetailTest {
         waitForTag(LibraryTestTags.ITEM, 1)
         compose.onNodeWithText("Cheese omelette").assertExists()
         assertEquals(saved, runBlocking { database.recipes().all().single { it.id == omelette.id } })
+    }
+
+    @Test
+    fun aWideWindowShowsTheRecipeBesideTheList() {
+        runBlocking { repository.save(listOf(omelette, toast)) }
+        setContent(AppLayout(NavigationType.RAIL, listDetail = true, compactHeight = false))
+        // The list pane is narrow on a phone, so only the first item may be laid out.
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cheese omelette")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(context.getString(R.string.library_select_recipe)).assertExists()
+
+        compose.onNodeWithText("Cheese omelette").performClick()
+        waitForTag(RecipeDetailTestTags.NAME)
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assertTextContains("Cheese omelette")
+        // The list stays beside it, with the open recipe marked.
+        compose.onNodeWithTag(LibraryTestTags.SEARCH).assertExists()
+        compose.onAllNodesWithTag(LibraryTestTags.ITEM).filterToOne(hasText("Cheese omelette")).assertIsSelected()
+
+        compose.onNodeWithTag(LibraryTestTags.LIST).performScrollToNode(hasText("Peanut butter toast"))
+        compose.onNodeWithText("Peanut butter toast").performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasTestTag(RecipeDetailTestTags.NAME) and hasText("Peanut butter toast")).fetchSemanticsNodes().size == 1
+        }
+
+        // Back closes the pane; the list is still there.
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
+        waitForTag(RecipeDetailTestTags.NAME, 0)
+        compose.onNodeWithText(context.getString(R.string.library_select_recipe)).assertExists()
+
+        // Delete from the pane closes it and the library offers Undo.
+        compose.onNodeWithTag(LibraryTestTags.LIST).performScrollToNode(hasText("Cheese omelette"))
+        compose.onNodeWithText("Cheese omelette").performClick()
+        waitForTag(RecipeDetailTestTags.DELETE)
+        compose.onNodeWithTag(RecipeDetailTestTags.DELETE).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(context.getString(R.string.recipe_deleted))).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cheese omelette")).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText(context.getString(R.string.library_select_recipe)).assertExists()
     }
 
     @Test

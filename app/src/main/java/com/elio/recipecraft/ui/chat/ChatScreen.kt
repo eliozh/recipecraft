@@ -12,9 +12,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -57,6 +61,7 @@ import com.elio.recipecraft.data.chat.ChatMessage
 import com.elio.recipecraft.data.chat.RecipeStatus
 import com.elio.recipecraft.data.llm.LlmErrorKind
 import com.elio.recipecraft.data.llm.LlmMessage
+import com.elio.recipecraft.ui.LocalAppLayout
 import com.elio.recipecraft.ui.common.isFixedInSettings
 import com.elio.recipecraft.ui.common.llmErrorText
 import com.elio.recipecraft.domain.GenerationShortfall
@@ -74,28 +79,40 @@ fun ChatScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    // A short window, such as a phone in landscape, folds the composer so the messages keep the room.
+    val compactHeight = LocalAppLayout.current.compactHeight
+    LaunchedEffect(compactHeight) {
+        if (compactHeight) viewModel.onComposerExpandedChanged(false)
+    }
     val last = state.messages.lastOrNull()
     LaunchedEffect(state.messages.size, last?.shownText?.length, last?.recipeStatus, last?.recipes?.size, state.error) {
         val count = listState.layoutInfo.totalItemsCount
         if (count > 0) listState.scrollToItem(count - 1)
     }
 
+    // Typing in a short window leaves room for little more than the input, so the bars step aside.
+    val typingInShortWindow = compactHeight && WindowInsets.isImeVisible
+
     Column(modifier.fillMaxSize().imePadding()) {
-        TopAppBar(
-            title = { Text(stringResource(R.string.tab_chat)) },
-            actions = {
-                IconButton(onClick = viewModel::onShowRecent, modifier = Modifier.testTag(ChatTestTags.RECENT)) {
-                    Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.chat_recent))
-                }
-                IconButton(
-                    onClick = viewModel::onNewChat,
-                    enabled = state.messages.isNotEmpty() || state.sending,
-                    modifier = Modifier.testTag(ChatTestTags.NEW_CHAT),
-                ) {
-                    Icon(painterResource(R.drawable.ic_new_chat), contentDescription = stringResource(R.string.chat_new))
-                }
-            },
-        )
+        if (typingInShortWindow) {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+        } else {
+            TopAppBar(
+                title = { Text(stringResource(R.string.tab_chat)) },
+                actions = {
+                    IconButton(onClick = viewModel::onShowRecent, modifier = Modifier.testTag(ChatTestTags.RECENT)) {
+                        Icon(painterResource(R.drawable.ic_history), contentDescription = stringResource(R.string.chat_recent))
+                    }
+                    IconButton(
+                        onClick = viewModel::onNewChat,
+                        enabled = state.messages.isNotEmpty() || state.sending,
+                        modifier = Modifier.testTag(ChatTestTags.NEW_CHAT),
+                    ) {
+                        Icon(painterResource(R.drawable.ic_new_chat), contentDescription = stringResource(R.string.chat_new))
+                    }
+                },
+            )
+        }
         Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(
                 state = listState,
@@ -147,15 +164,19 @@ fun ChatScreen(
             }
         }
         if (state.sending) LinearProgressIndicator(Modifier.fillMaxWidth())
-        GenerationComposer(
-            state = state.composer,
-            sending = state.sending,
-            onScopeChanged = viewModel::onScopeChanged,
-            onCountChanged = viewModel::onCountChanged,
-            onPreferencesChanged = viewModel::onPreferencesChanged,
-            onExpandedChanged = viewModel::onComposerExpandedChanged,
-            onGenerate = viewModel::onGenerate,
-        )
+        if (!typingInShortWindow) {
+            GenerationComposer(
+                state = state.composer,
+                sending = state.sending,
+                onScopeChanged = viewModel::onScopeChanged,
+                onCountChanged = viewModel::onCountChanged,
+                onPreferencesChanged = viewModel::onPreferencesChanged,
+                onExpandedChanged = viewModel::onComposerExpandedChanged,
+                onGenerate = viewModel::onGenerate,
+                // Opened by hand in a short window, it scrolls instead of pushing the messages away.
+                modifier = if (compactHeight) Modifier.heightIn(max = COMPACT_HEIGHT_COMPOSER_MAX) else Modifier,
+            )
+        }
         state.modify?.let { modify ->
             ModifySheet(
                 recipeName = state.messages.firstOrNull { it.id == modify.messageId }
@@ -168,8 +189,8 @@ fun ChatScreen(
                 onCancel = viewModel::onModifyCancel,
             )
         }
-        // Left out while typing, so the keyboard leaves room for the messages.
-        if (state.messages.isNotEmpty() && !WindowInsets.isImeVisible) {
+        // Left out while typing and in a short window, so the messages keep the room.
+        if (state.messages.isNotEmpty() && !WindowInsets.isImeVisible && !compactHeight) {
             PresetChips(
                 chips = PresetChip.forChat(empty = false),
                 enabled = !state.sending,
@@ -430,6 +451,8 @@ private fun Composer(
         }
     }
 }
+
+private val COMPACT_HEIGHT_COMPOSER_MAX = 200.dp
 
 /** Stable handles for UI tests. */
 object ChatTestTags {

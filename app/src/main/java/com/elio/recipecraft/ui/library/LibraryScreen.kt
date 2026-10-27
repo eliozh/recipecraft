@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -38,6 +39,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -58,6 +60,8 @@ fun LibraryScreen(
     onOpenChat: () -> Unit,
     onOpenRecipe: (String) -> Unit,
     modifier: Modifier = Modifier,
+    /** The recipe open beside the list, if any; its item is highlighted. */
+    selectedId: String? = null,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,7 +98,7 @@ fun LibraryScreen(
                     if (state.recipes.isEmpty()) {
                         Message(stringResource(R.string.library_no_match), LibraryTestTags.NO_MATCH)
                     } else {
-                        RecipeList(state.recipes, onOpenRecipe)
+                        RecipeList(state.recipes, selectedId, onOpenRecipe)
                     }
                 }
             }
@@ -169,20 +173,32 @@ private fun SearchAndFilter(state: LibraryUiState, onQueryChanged: (String) -> U
 }
 
 @Composable
-private fun RecipeList(recipes: List<Recipe>, onOpenRecipe: (String) -> Unit) {
+private fun RecipeList(recipes: List<Recipe>, selectedId: String?, onOpenRecipe: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize().testTag(LibraryTestTags.LIST),
     ) {
-        items(recipes, key = { it.id }) { recipe -> LibraryItem(recipe, onClick = { onOpenRecipe(recipe.id) }) }
+        items(recipes, key = { it.id }) { recipe -> LibraryItem(recipe, selected = recipe.id == selectedId, onClick = { onOpenRecipe(recipe.id) }) }
     }
 }
 
 /** A saved recipe in the list; tapping it opens its detail screen. */
 @Composable
-private fun LibraryItem(recipe: Recipe, onClick: () -> Unit) {
-    Card(onClick = onClick, modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth().testTag(LibraryTestTags.ITEM)) {
+private fun LibraryItem(recipe: Recipe, selected: Boolean, onClick: () -> Unit) {
+    Card(
+        onClick = onClick,
+        colors = if (selected) {
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+        } else {
+            CardDefaults.cardColors()
+        },
+        modifier = Modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth()
+            .semantics { this.selected = selected }
+            .testTag(LibraryTestTags.ITEM),
+    ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(recipe.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Text(
@@ -240,4 +256,5 @@ object LibraryTestTags {
     const val IMPORT = "library_import"
     const val IMPORT_SUMMARY = "library_import_summary"
     const val TRANSFERRING = "library_transferring"
+    const val DETAIL_PANE = "library_detail_pane"
 }

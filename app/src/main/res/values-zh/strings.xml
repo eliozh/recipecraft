@@ -10,6 +10,7 @@
     <string name="library_load_failed">无法加载你的食谱。</string>
     <string name="library_search_hint">搜索食谱或食材</string>
     <string name="library_filter_all">全部</string>
+    <string name="library_select_recipe">选择一个食谱，在这里查看。</string>
     <string name="recipe_save">保存</string>
     <string name="recipe_saved">已保存</string>
     <string name="recipe_save_all">全部保存</string>

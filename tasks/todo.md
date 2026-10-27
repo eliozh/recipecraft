@@ -23,7 +23,7 @@
 
 ## Phase 3: Devices and polish
 - [x] T16 Export, import, and share
-- [ ] T17 Adaptive and full-screen layouts and Android 17 compliance
+- [x] T17 Adaptive and full-screen layouts and Android 17 compliance
 - [ ] T18 Samsung Z Flip 8 cover-screen layout and Cook mode (real device)
 - [ ] T19 Error messages and accessibility
 - [ ] T20 Release build and About screen (R8, signing, disclaimer, USDA attribution)
