@@ -71,7 +71,7 @@ Run from the repo root once Task 1 has set up the wrapper. This machine has no s
 ```bash
 export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9
 ./gradlew test assembleDebug lint koverVerify   # the pre-commit gate (koverVerify enforces 80% from T4)
-./gradlew connectedDebugAndroidTest   # needs the Pixel_10_Pro AVD running
+./gradlew connectedDebugAndroidTest   # needs the Pixel_10_Pro_API37 AVD running
 ```
 
 ## Hard rules

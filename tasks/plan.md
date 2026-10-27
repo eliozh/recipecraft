@@ -6,7 +6,7 @@ The approved requirements are in `SPEC.md` (approved 2026-10-27), which is the s
 
 RecipeCraft is a new Android app: free, personal and non-commercial. The user chats with an LLM to generate recipes for breakfast, lunch, dinner, and other meals, either as a full-day set or as single meals, and chooses how many to generate. They can ask the AI to change one recipe at a time, and they save the recipes they like. Each recipe has ingredients, kitchen tools, numbered steps, and calories. Calories come from a nutrition database when every ingredient matches one, and from an AI estimate otherwise. The user brings their own API key for Claude, OpenAI, DeepSeek, or a custom endpoint. The UI and the built-in prompts come in English and Chinese. Each recipe keeps the language it was generated in, and the app offers an LLM translation when the user switches language. The app targets Android 17 (API 37), lays out correctly on edge-to-edge and full-screen displays, and is tuned for the Samsung Z Flip 8 cover screen, which will be verified on a real device.
 
-The project starts from nothing: `/home/elio/Workspace/recipecraft` held only planning documents. The git repo (branch `main`) was initialized before T1 so the planning documents could be committed first. The machine has an Android SDK at `~/Android/Sdk` with platforms `android-37.0`, build-tools `36.0.0`, system images 36.1 and 37.1, and a `Pixel_10_Pro` AVD. **No JDK is on PATH**; the user chose a user-local Temurin 21 at `~/.jdks/jdk-21.0.13+9`, referenced from `~/.gradle/gradle.properties` (`org.gradle.java.home`, which picks the daemon's JVM) and never committed. The `gradlew` script itself still needs `JAVA_HOME` to start, so every command runs with `export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9` (see `AGENTS.md`).
+The project starts from nothing: `/home/elio/Workspace/recipecraft` held only planning documents. The git repo (branch `main`) was initialized before T1 so the planning documents could be committed first. The machine has an Android SDK at `~/Android/Sdk` with platforms `android-37.0`, build-tools `36.0.0`, system images 36.1 and 37.1, and a `Pixel_10_Pro` AVD on the 36.1 image. T1 added `Pixel_10_Pro_API37` on the 37.1 image, which every emulator check uses. **No JDK is on PATH**; the user chose a user-local Temurin 21 at `~/.jdks/jdk-21.0.13+9`, referenced from `~/.gradle/gradle.properties` (`org.gradle.java.home`, which picks the daemon's JVM) and never committed. The `gradlew` script itself still needs `JAVA_HOME` to start, so every command runs with `export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9` (see `AGENTS.md`).
 
 Decisions the user confirmed:
 - **App ID:** `com.elio.recipecraft`, with minSdk 34 (Android 14).
@@ -103,7 +103,7 @@ T8 creates `AppDatabase` and T10 adds `recipes` to it, so T8 → T10 is sequenti
 
 **Task 1: Project scaffold that builds and launches** *(M)*
 - `~/.gradle/gradle.properties` already points Gradle at the Temurin 21 JDK in `~/.jdks`; run every `./gradlew` command with `JAVA_HOME` exported to it. Add the Gradle wrapper (there is no system `gradle`, so fetch the wrapper files or a Gradle distribution directly), `libs.versions.toml`, the `:app` module with `applicationId = "com.elio.recipecraft"`, a Hilt `Application`, `MainActivity` with `enableEdgeToEdge()`, an M3 theme with dynamic color, and a bottom navigation with empty Chat, Library, and Settings screens. Set SDK levels to 37/37/34 and `local.properties` to `sdk.dir`. Configure Kover over `domain` and `data` with the 80% line-coverage rule written but disabled: there is no code to measure yet, and an empty set would either pass vacuously or fail. T4 turns it on. Add a `.gitignore` that covers `local.properties`, build outputs, and keystores.
-- AC: `./gradlew assembleDebug lint koverVerify` succeeds, and `./gradlew koverHtmlReport` produces a report. The app launches on `Pixel_10_Pro` (API 37) and switches between the three tabs. Content draws behind the system bars without overlapping them.
+- AC: `./gradlew assembleDebug lint koverVerify` succeeds, and `./gradlew koverHtmlReport` produces a report. The app launches on `Pixel_10_Pro_API37` (API 37) and switches between the three tabs. Content draws behind the system bars without overlapping them.
 - Verify: `./gradlew assembleDebug lint koverVerify`. Launch the emulator, then install and open the app.
 - Files: `settings.gradle.kts`, `build.gradle.kts`, `gradle/libs.versions.toml`, `app/build.gradle.kts`, `AndroidManifest.xml`, `MainActivity.kt`, `ui/theme/*`, `ui/AppNav.kt`, `.gitignore`.
 
@@ -218,7 +218,7 @@ T8 creates `AppDatabase` and T10 adds `recipes` to it, so T8 → T10 is sequenti
 **Task 17: Adaptive and full-screen layouts and Android 17 compliance** *(M)*
 - Add `WindowSizeClass`-driven navigation (bottom bar, rail, or list-detail) and handle display cutouts and insets on every screen. Support predictive back. Review the official Android 17 behavior changes for apps targeting API 37 and fix anything that applies. Declare `resizeableActivity`. Make sure no screen locks orientation.
 - AC: there's no clipping or overlap on the API 37 emulator in portrait, landscape, a resizable desktop-style window, or a tablet size. Predictive back animates. The app has no lint warnings about targeting.
-- Verify: Compose previews at compact, medium, and expanded sizes. Manual runs on the resizable emulator and on the `Pixel_10_Pro` AVD in both orientations.
+- Verify: Compose previews at compact, medium, and expanded sizes. Manual runs on the resizable emulator and on the `Pixel_10_Pro_API37` AVD in both orientations.
 - Files: `ui/AppNav.kt`, `ui/AdaptiveScaffold.kt`, `ui/library/LibraryDetailPane.kt`, `AndroidManifest.xml`.
 
 **Task 18: Samsung Z Flip 8 cover-screen layout and Cook mode** *(M)*
@@ -271,5 +271,5 @@ None. All were resolved in `SPEC.md` on 2026-10-27.
 ## Verification (whole project)
 
 - Unit tests and coverage: `./gradlew test koverVerify` (parsers, prompt builder, SSE clients against MockWebServer, language resolver, matcher, calorie calculator, CSV importer, translation validator, export round-trip).
-- Instrumented tests: `./gradlew connectedDebugAndroidTest` on the API 37 `Pixel_10_Pro` AVD (Room, SecretStore, Compose flows).
+- Instrumented tests: `./gradlew connectedDebugAndroidTest` on the API 37 `Pixel_10_Pro_API37` AVD (Room, SecretStore, Compose flows).
 - Manual runs with real keys for Claude, OpenAI, and DeepSeek in both English and Chinese, on the phone AVD, a resizable or tablet AVD, and the real Z Flip 8 (cover and main screens).
