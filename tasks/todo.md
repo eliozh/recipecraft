@@ -14,7 +14,7 @@
 - [x] T8 Import your own nutrition tables (creates AppDatabase; CSV import, Settings > Nutrition tables)
 - [x] T9 Generation composer for full-day sets, single meals, and a count (can run in parallel with T8)
 - [x] T10 Save recipes and browse the library (filter, search; after T8)
-- [ ] T11 Recipe detail screen and delete with undo
+- [x] T11 Recipe detail screen and delete with undo
 - [ ] T12 Translate recipes when the language changes
 - [ ] T13 Change one recipe in the chat
 - [ ] T14 Change a saved recipe from its detail screen (replace or save as copy)

@@ -183,4 +183,28 @@
     <!-- day number, missing meals joined with list_separator -->
     <string name="generation_incomplete_set">Day %1$d is missing %2$s.</string>
     <string name="list_separator">", "</string>
+    <string name="action_back">Back</string>
+    <string name="action_undo">Undo</string>
+    <string name="recipe_delete">Delete recipe</string>
+    <string name="recipe_deleted">Recipe deleted</string>
+    <string name="recipe_delete_failed">Couldn\'t delete the recipe. Try again.</string>
+    <string name="recipe_restore_failed">Couldn\'t restore the recipe.</string>
+    <string name="recipe_not_found">This recipe is no longer in your library.</string>
+    <string name="recipe_load_failed">Couldn\'t load this recipe.</string>
+    <!-- a date -->
+    <string name="recipe_created">Created %1$s</string>
+    <!-- a date -->
+    <string name="recipe_updated">Updated %1$s</string>
+    <!-- a weight in grams, already formatted: "120" -->
+    <string name="recipe_ingredient_grams">%1$s g</string>
+    <!-- calories of one ingredient from a nutrition table -->
+    <plurals name="recipe_ingredient_kcal">
+        <item quantity="one">%1$d kcal</item>
+        <item quantity="other">%1$d kcal</item>
+    </plurals>
+    <!-- the model's calorie estimate for one ingredient that matched no table -->
+    <plurals name="recipe_ingredient_kcal_ai">
+        <item quantity="one">≈ %1$d kcal (AI)</item>
+        <item quantity="other">≈ %1$d kcal (AI)</item>
+    </plurals>
 </resources>

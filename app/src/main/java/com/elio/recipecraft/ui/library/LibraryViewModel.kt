@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.ui.recipe.UndoDelete
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
@@ -31,12 +32,18 @@ data class LibraryUiState(
     /** True until the first results arrive, so no empty state flashes. */
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
+    /** Putting back a deleted recipe failed; shown once, then cleared by [LibraryViewModel.onRestoreFailedShown]. */
+    val restoreFailed: Boolean = false,
 )
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val repository: RecipeRepository,
+    private val undoDelete: UndoDelete,
 ) : ViewModel() {
+
+    /** The recipe just deleted from its detail screen, while its "Recipe deleted" snackbar can still undo it. */
+    val pendingUndo: StateFlow<Recipe?> = undoDelete.pending
 
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
@@ -51,6 +58,29 @@ class LibraryViewModel @Inject constructor(
 
     fun onMealTypeSelected(mealType: MealType?) {
         _uiState.update { it.copy(mealType = mealType) }
+    }
+
+    /** Undo on the snackbar: puts [recipe] back exactly as it was. */
+    fun onUndo(recipe: Recipe) {
+        if (!undoDelete.take(recipe)) return
+        viewModelScope.launch {
+            try {
+                repository.restore(recipe)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: RuntimeException) {
+                _uiState.update { it.copy(restoreFailed = true) }
+            }
+        }
+    }
+
+    /** The snackbar went away without Undo, so the deletion stands. */
+    fun onUndoDismissed(recipe: Recipe) {
+        undoDelete.take(recipe)
+    }
+
+    fun onRestoreFailedShown() {
+        _uiState.update { it.copy(restoreFailed = false) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

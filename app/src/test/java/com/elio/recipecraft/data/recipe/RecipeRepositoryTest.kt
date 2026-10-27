@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -115,4 +116,33 @@ class RecipeRepositoryTest {
         assertEquals(1, repository.recalculate(emptyList()))
         assertEquals(Calories(300, 150, CalorieSource.AI_ESTIMATE, 300), dao.recipes.first { it.id == "eggs" }.calories)
     }
+
+    @Test
+    fun `the detail of a saved recipe carries each ingredient's database kcal`() = runTest {
+        nutrition.lookups = listOf(lookupOf("egg" to 155.0))
+        repository.save(listOf(testRecipe("a", ingredients = listOf(ingredient("egg", grams = 50.0), ingredient("caviar")))))
+
+        val detail = repository.observeDetail("a").first()!!
+        assertEquals("a", detail.recipe.id)
+        assertEquals(listOf(78, null), detail.ingredientKcal)
+        assertNull(repository.observeDetail("missing").first())
+    }
+
+    @Test
+    fun `delete removes the recipe and restore puts back the identical record`() = runTest {
+        nutrition.lookups = listOf(lookupOf("egg" to 155.0))
+        repository.save(listOf(testRecipe("a", createdAt = 42), testRecipe("b")))
+        val saved = dao.recipes.first { it.id == "a" }.toDomain()
+
+        repository.delete("a")
+        assertEquals(listOf("b"), dao.recipes.map { it.id })
+        assertNull(repository.observeDetail("a").first())
+
+        // A table change meanwhile must not alter the restored record's calories.
+        nutrition.lookups = emptyList()
+        repository.restore(saved)
+        assertEquals(saved, repository.observeDetail("a").first()!!.recipe)
+        assertEquals(saved.toEntity(), dao.recipes.first { it.id == "a" })
+    }
 }
+

@@ -42,6 +42,7 @@ import com.elio.recipecraft.ui.chat.ChatTestTags
 import com.elio.recipecraft.ui.chat.ChatViewModel
 import com.elio.recipecraft.ui.chat.ComposerTestTags
 import com.elio.recipecraft.ui.recipe.RecipeCardTestTags
+import com.elio.recipecraft.ui.recipe.UndoDelete
 import com.elio.recipecraft.ui.theme.RecipeCraftTheme
 import java.time.Clock
 import kotlinx.coroutines.Dispatchers
@@ -90,11 +91,11 @@ class SaveToLibraryTest {
             nutrition = noTables,
             recipes = repository,
         )
-        val library = LibraryViewModel(repository)
+        val library = LibraryViewModel(repository, UndoDelete())
         compose.setContent {
             RecipeCraftTheme {
                 if (showLibrary) {
-                    LibraryScreen(onOpenChat = { showLibrary = false }, viewModel = library)
+                    LibraryScreen(onOpenChat = { showLibrary = false }, onOpenRecipe = {}, viewModel = library)
                 } else {
                     ChatScreen(onOpenSettings = {}, viewModel = chat)
                 }

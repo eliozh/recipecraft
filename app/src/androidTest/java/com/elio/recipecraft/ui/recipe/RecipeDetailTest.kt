@@ -1,0 +1,195 @@
+package com.elio.recipecraft.ui.recipe
+
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.rememberNavController
+import androidx.room.Room
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
+import com.elio.recipecraft.R
+import com.elio.recipecraft.data.AppDatabase
+import com.elio.recipecraft.data.nutrition.IngredientMatcher
+import com.elio.recipecraft.data.nutrition.NutritionFood
+import com.elio.recipecraft.data.nutrition.NutritionLookup
+import com.elio.recipecraft.data.nutrition.NutritionLookups
+import com.elio.recipecraft.data.nutrition.TableLookup
+import com.elio.recipecraft.data.recipe.RecipeRepository
+import com.elio.recipecraft.domain.CalorieSource
+import com.elio.recipecraft.domain.Calories
+import com.elio.recipecraft.domain.Ingredient
+import com.elio.recipecraft.domain.Language
+import com.elio.recipecraft.domain.MealType
+import com.elio.recipecraft.domain.Recipe
+import com.elio.recipecraft.domain.Step
+import com.elio.recipecraft.ui.TopLevelDestination
+import com.elio.recipecraft.ui.library.LibraryTestTags
+import com.elio.recipecraft.ui.library.LibraryViewModel
+import com.elio.recipecraft.ui.libraryGraph
+import com.elio.recipecraft.ui.theme.RecipeCraftTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+
+/** Opens a saved recipe from the real library graph, checks every section, then deletes it and undoes that. */
+@RunWith(AndroidJUnit4::class)
+class RecipeDetailTest {
+
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).build()
+
+    @After
+    fun close() = database.close()
+
+    private val omelette = Recipe(
+        id = "omelette-1",
+        name = "Cheese omelette",
+        mealType = MealType.BREAKFAST,
+        servings = 2,
+        calories = Calories(null, null, CalorieSource.AI_ESTIMATE, 420),
+        // Long enough that the list has to scroll.
+        ingredients = listOf(Ingredient("Eggs", "egg", "3", "", 150.0, 210)) +
+            (1..20).map { Ingredient("Herb $it", "herb $it", "1", "pinch", null, null) } +
+            Ingredient("Saffron", "saffron", "1", "pinch", 0.5, 2),
+        tools = listOf("Non-stick pan", "Whisk"),
+        steps = listOf(Step(1, "Whisk the eggs.", 2), Step(2, "Cook until set.", null)),
+        language = Language.EN,
+        setId = null,
+        createdAt = 1_700_000_000_000,
+        updatedAt = 1_700_000_000_000,
+    )
+
+    private val toast = omelette.copy(id = "toast-1", name = "Peanut butter toast", createdAt = 1_600_000_000_000)
+
+    private val repository by lazy {
+        val eggsOnly = object : NutritionLookups {
+            private val lookups = listOf<NutritionLookup>(TableLookup(IngredientMatcher(listOf(NutritionFood("egg", emptyList(), 143.0)))))
+            override suspend fun current() = lookups
+            override fun observe() = flowOf(lookups)
+        }
+        RecipeRepository(database.recipes(), eggsOnly, Dispatchers.IO)
+    }
+
+    private fun setContent() {
+        val undoDelete = UndoDelete()
+        val library = LibraryViewModel(repository, undoDelete)
+        compose.setContent {
+            RecipeCraftTheme {
+                val navController = rememberNavController()
+                NavHost(navController, startDestination = TopLevelDestination.LIBRARY.route) {
+                    libraryGraph(
+                        navController,
+                        onOpenChat = {},
+                        libraryViewModel = { library },
+                        detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete) } },
+                    )
+                }
+            }
+        }
+    }
+
+    private fun waitForTag(tag: String, count: Int = 1) =
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size == count }
+
+    private fun scrollTo(tag: String) = compose.onNodeWithTag(RecipeDetailTestTags.SCREEN).performScrollToNode(hasTestTag(tag))
+
+    @Test
+    fun detailShowsEverySectionAndDeleteCanBeUndone() {
+        runBlocking { repository.save(listOf(omelette, toast)) }
+        val saved = runBlocking { database.recipes().all().single { it.id == omelette.id } }
+        setContent()
+        waitForTag(LibraryTestTags.ITEM, 2)
+
+        // Search first, to check the library keeps it across the detail screen.
+        compose.onNodeWithTag(LibraryTestTags.SEARCH).performTextInput("cheese")
+        waitForTag(LibraryTestTags.ITEM, 1)
+        compose.onNodeWithText("Cheese omelette").performClick()
+
+        waitForTag(RecipeDetailTestTags.NAME)
+        compose.waitForIdle()
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assertTextContains("Cheese omelette")
+        compose.onNodeWithTag(RecipeDetailTestTags.META)
+            .assertTextContains(
+                listOf(
+                    context.getString(R.string.meal_breakfast),
+                    context.resources.getQuantityString(R.plurals.recipe_servings, 2, 2),
+                    context.getString(R.string.language_english),
+                ).joinToString(" · "),
+            )
+        compose.onNodeWithTag(RecipeDetailTestTags.DATES).assertTextContains("Created", substring = true)
+        compose.onNodeWithTag(RecipeCardTestTags.CALORIES).assertTextContains("420 kcal total · 210 kcal per serving")
+        compose.onNodeWithTag(RecipeDetailTestTags.DISCLAIMER).assertTextContains(context.getString(R.string.recipe_calories_disclaimer))
+        // Eggs matched the table: 150 g × 143 / 100; saffron did not, so it shows the model's figure.
+        compose.onNodeWithText("3 Eggs").assertExists()
+        compose.onNodeWithText("150 g · 215 kcal").assertExists()
+        scrollTo(RecipeDetailTestTags.TOOLS)
+        compose.onNodeWithText("1 pinch Saffron").assertExists()
+        compose.onNodeWithText("0.5 g · ≈ 2 kcal (AI)").assertExists()
+        compose.onNodeWithText("• Whisk").assertExists()
+        scrollTo(RecipeDetailTestTags.STEPS)
+        compose.onNodeWithTag(RecipeDetailTestTags.SCREEN).performScrollToNode(hasText("Cook until set."))
+        compose.onNodeWithText("Whisk the eggs.").assertExists()
+        compose.onNodeWithText("2 min").assertExists()
+
+        // Back keeps the search.
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
+        compose.waitForIdle()
+        waitForTag(LibraryTestTags.ITEM, 1)
+        compose.onNodeWithTag(LibraryTestTags.SEARCH).assertTextContains("cheese")
+
+        // Delete, then Undo from the library's snackbar.
+        compose.onNodeWithText("Cheese omelette").performClick()
+        waitForTag(RecipeDetailTestTags.DELETE)
+        compose.onNodeWithTag(RecipeDetailTestTags.DELETE).performClick()
+        compose.waitUntil(5_000) {
+            compose.onAllNodes(hasText(context.getString(R.string.recipe_deleted))).fetchSemanticsNodes().isNotEmpty()
+        }
+        waitForTag(LibraryTestTags.NO_MATCH)
+        assertEquals(listOf(toast.id), runBlocking { database.recipes().all().map { it.id } })
+
+        compose.onNodeWithText(context.getString(R.string.action_undo)).performClick()
+        waitForTag(LibraryTestTags.ITEM, 1)
+        compose.onNodeWithText("Cheese omelette").assertExists()
+        assertEquals(saved, runBlocking { database.recipes().all().single { it.id == omelette.id } })
+    }
+
+    @Test
+    fun anUnknownIdSaysTheRecipeIsGone() {
+        compose.setContent {
+            RecipeCraftTheme {
+                RecipeDetailScreen(
+                    onBack = {},
+                    onDeleted = {},
+                    viewModel = viewModel {
+                        RecipeDetailViewModel(
+                            SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to "gone")),
+                            repository,
+                            UndoDelete(),
+                        )
+                    },
+                )
+            }
+        }
+        waitForTag(RecipeDetailTestTags.NOT_FOUND)
+        compose.onNodeWithText(context.getString(R.string.recipe_not_found)).assertExists()
+    }
+}

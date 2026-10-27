@@ -6,6 +6,7 @@ import com.elio.recipecraft.testing.FakeNutritionLookups
 import com.elio.recipecraft.testing.FakeRecipeDao
 import com.elio.recipecraft.testing.ingredient
 import com.elio.recipecraft.testing.testRecipe
+import com.elio.recipecraft.ui.recipe.UndoDelete
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -15,6 +16,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -39,7 +41,7 @@ class LibraryViewModelTest {
 
     @Test
     fun `an empty library says so`() = runTest {
-        val state = LibraryViewModel(repository).uiState.value
+        val state = LibraryViewModel(repository, UndoDelete()).uiState.value
         assertFalse(state.loading)
         assertTrue(state.libraryEmpty)
         assertTrue(state.recipes.isEmpty())
@@ -48,7 +50,7 @@ class LibraryViewModelTest {
     @Test
     fun `saved recipes list newest first and new saves show up`() = runTest {
         repository.save(listOf(testRecipe("old", createdAt = 1)))
-        val vm = LibraryViewModel(repository)
+        val vm = LibraryViewModel(repository, UndoDelete())
         assertEquals(listOf("old"), vm.ids)
 
         repository.save(listOf(testRecipe("new", createdAt = 2)))
@@ -65,7 +67,7 @@ class LibraryViewModelTest {
                 testRecipe("toast", name = "Egg toast", mealType = MealType.BREAKFAST, createdAt = 1),
             ),
         )
-        val vm = LibraryViewModel(repository)
+        val vm = LibraryViewModel(repository, UndoDelete())
 
         vm.onMealTypeSelected(MealType.BREAKFAST)
         assertEquals(listOf("oats", "toast"), vm.ids)
@@ -88,8 +90,38 @@ class LibraryViewModelTest {
     @Test
     fun `an unreadable database shows a load failure`() = runTest {
         dao.failReads = true
-        val state = LibraryViewModel(repository).uiState.value
+        val state = LibraryViewModel(repository, UndoDelete()).uiState.value
         assertTrue(state.loadFailed)
         assertFalse(state.loading)
     }
+
+    @Test
+    fun `dismissing the deleted snackbar drops the recipe for good`() = runTest {
+        val undo = UndoDelete()
+        val recipe = testRecipe("a")
+        undo.offer(recipe)
+        val vm = LibraryViewModel(repository, undo)
+        assertEquals(recipe, vm.pendingUndo.value)
+
+        vm.onUndoDismissed(recipe)
+        assertNull(vm.pendingUndo.value)
+        // A late Undo for the same recipe does nothing.
+        vm.onUndo(recipe)
+        assertTrue(dao.recipes.isEmpty())
+    }
+
+    @Test
+    fun `a failed undo reports it once`() = runTest {
+        val undo = UndoDelete()
+        val recipe = testRecipe("a")
+        undo.offer(recipe)
+        val vm = LibraryViewModel(repository, undo)
+        dao.failWrites = true
+
+        vm.onUndo(recipe)
+        assertTrue(vm.uiState.value.restoreFailed)
+        vm.onRestoreFailedShown()
+        assertFalse(vm.uiState.value.restoreFailed)
+    }
 }
+

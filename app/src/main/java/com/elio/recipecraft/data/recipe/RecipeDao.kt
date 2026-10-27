@@ -24,6 +24,9 @@ abstract class RecipeDao {
     )
     abstract fun observe(mealType: MealType?, query: String): Flow<List<RecipeEntity>>
 
+    @Query("SELECT * FROM recipes WHERE id = :id")
+    abstract fun observeById(id: String): Flow<RecipeEntity?>
+
     @Query("SELECT id FROM recipes")
     abstract fun observeIds(): Flow<List<String>>
 
@@ -36,6 +39,9 @@ abstract class RecipeDao {
     /** Inserts new recipes and replaces saved ones with the same id, so saving twice never duplicates. */
     @Upsert
     abstract suspend fun upsert(recipes: List<RecipeEntity>)
+
+    @Query("DELETE FROM recipes WHERE id = :id")
+    abstract suspend fun deleteById(id: String)
 
     @Query("UPDATE recipes SET calories = :calories WHERE id = :id")
     abstract suspend fun setCalories(id: String, calories: Calories)

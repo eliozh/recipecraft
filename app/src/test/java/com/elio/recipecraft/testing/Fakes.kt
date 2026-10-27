@@ -134,6 +134,8 @@ class FakeRecipeDao : RecipeDao() {
             .map { it.value }
     }
 
+    override fun observeById(id: String): Flow<RecipeEntity?> = readable().map { all -> all.firstOrNull { it.id == id } }
+
     override fun observeIds(): Flow<List<String>> = readable().map { all -> all.map { it.id } }
 
     override fun observeCount(): Flow<Int> = readable().map { it.size }
@@ -148,6 +150,8 @@ class FakeRecipeDao : RecipeDao() {
             if (acc.any { it.id == recipe.id }) acc.map { if (it.id == recipe.id) recipe else it } else acc + recipe
         }
     }
+
+    override suspend fun deleteById(id: String) = write { all -> all.filter { it.id != id } }
 
     override suspend fun setCalories(id: String, calories: Calories) {
         calorieWrites += id

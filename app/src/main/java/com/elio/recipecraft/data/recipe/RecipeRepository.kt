@@ -10,6 +10,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 
@@ -33,6 +34,26 @@ class RecipeRepository @Inject constructor(
     fun observe(mealType: MealType?, query: String): Flow<List<Recipe>> =
         dao.observe(mealType, RecipeDao.escapeLike(query.trim().lowercase()))
             .map { entities -> entities.map { it.toDomain() } }
+
+    /**
+     * The saved recipe [id] with the database kcal of each of its ingredients, against the current
+     * tables; null when no recipe has that id, such as after it was deleted.
+     */
+    fun observeDetail(id: String): Flow<RecipeDetail?> =
+        dao.observeById(id)
+            .map { entity ->
+                entity?.toDomain()?.let { RecipeDetail(it, CalorieCalculator.ingredientKcal(it, nutrition.current())) }
+            }
+            .flowOn(ioDispatcher)
+
+    /** Deletes the saved recipe [id], if there is one. */
+    suspend fun delete(id: String) = dao.deleteById(id)
+
+    /**
+     * Puts back a recipe exactly as it was, such as one just deleted, without working out its
+     * calories again, so the restored record is identical.
+     */
+    suspend fun restore(recipe: Recipe) = dao.upsert(listOf(recipe.toEntity()))
 
     /**
      * Saves [recipes], replacing any saved recipe with the same id. Calories are worked out again
@@ -65,3 +86,10 @@ class RecipeRepository @Inject constructor(
         return changes.size
     }
 }
+
+/** A saved recipe as its detail screen shows it. */
+data class RecipeDetail(
+    val recipe: Recipe,
+    /** The database kcal of each ingredient, in the order of [Recipe.ingredients]; null where it did not match. */
+    val ingredientKcal: List<Int?>,
+)

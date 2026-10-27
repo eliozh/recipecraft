@@ -18,9 +18,15 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -41,23 +47,49 @@ import com.elio.recipecraft.ui.recipe.label
 @Composable
 fun LibraryScreen(
     onOpenChat: () -> Unit,
+    onOpenRecipe: (String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: LibraryViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    Column(modifier.fillMaxSize()) {
-        when {
-            state.loading -> Unit
-            state.loadFailed -> Message(stringResource(R.string.library_load_failed), LibraryTestTags.LOAD_FAILED)
-            state.libraryEmpty -> EmptyLibrary(onOpenChat)
-            else -> {
-                SearchAndFilter(state, viewModel::onQueryChanged, viewModel::onMealTypeSelected)
-                if (state.recipes.isEmpty()) {
-                    Message(stringResource(R.string.library_no_match), LibraryTestTags.NO_MATCH)
-                } else {
-                    RecipeList(state.recipes)
+    val pendingUndo by viewModel.pendingUndo.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    Box(modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            when {
+                state.loading -> Unit
+                state.loadFailed -> Message(stringResource(R.string.library_load_failed), LibraryTestTags.LOAD_FAILED)
+                state.libraryEmpty -> EmptyLibrary(onOpenChat)
+                else -> {
+                    SearchAndFilter(state, viewModel::onQueryChanged, viewModel::onMealTypeSelected)
+                    if (state.recipes.isEmpty()) {
+                        Message(stringResource(R.string.library_no_match), LibraryTestTags.NO_MATCH)
+                    } else {
+                        RecipeList(state.recipes, onOpenRecipe)
+                    }
                 }
             }
+        }
+        SnackbarHost(snackbarHostState, Modifier.align(Alignment.BottomCenter))
+    }
+
+    val deletedMessage = stringResource(R.string.recipe_deleted)
+    val undoLabel = stringResource(R.string.action_undo)
+    LaunchedEffect(pendingUndo) {
+        val recipe = pendingUndo ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            deletedMessage,
+            actionLabel = undoLabel,
+            withDismissAction = true,
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) viewModel.onUndo(recipe) else viewModel.onUndoDismissed(recipe)
+    }
+    val restoreFailedMessage = stringResource(R.string.recipe_restore_failed)
+    LaunchedEffect(state.restoreFailed) {
+        if (state.restoreFailed) {
+            viewModel.onRestoreFailedShown()
+            snackbarHostState.showSnackbar(restoreFailedMessage)
         }
     }
 }
@@ -94,20 +126,20 @@ private fun SearchAndFilter(state: LibraryUiState, onQueryChanged: (String) -> U
 }
 
 @Composable
-private fun RecipeList(recipes: List<Recipe>) {
+private fun RecipeList(recipes: List<Recipe>, onOpenRecipe: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize().testTag(LibraryTestTags.LIST),
     ) {
-        items(recipes, key = { it.id }) { LibraryItem(it) }
+        items(recipes, key = { it.id }) { recipe -> LibraryItem(recipe, onClick = { onOpenRecipe(recipe.id) }) }
     }
 }
 
-/** A saved recipe in the list; T11 opens its detail screen from here. */
+/** A saved recipe in the list; tapping it opens its detail screen. */
 @Composable
-private fun LibraryItem(recipe: Recipe) {
-    Card(Modifier.widthIn(max = 640.dp).fillMaxWidth().testTag(LibraryTestTags.ITEM)) {
+private fun LibraryItem(recipe: Recipe, onClick: () -> Unit) {
+    Card(onClick = onClick, modifier = Modifier.widthIn(max = 640.dp).fillMaxWidth().testTag(LibraryTestTags.ITEM)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(recipe.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
             Text(

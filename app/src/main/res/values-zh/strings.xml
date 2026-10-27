@@ -173,4 +173,26 @@
     <!-- day number, missing meals joined with list_separator -->
     <string name="generation_incomplete_set">第 %1$d 天缺少%2$s。</string>
     <string name="list_separator">、</string>
+    <string name="action_back">返回</string>
+    <string name="action_undo">撤销</string>
+    <string name="recipe_delete">删除食谱</string>
+    <string name="recipe_deleted">已删除食谱</string>
+    <string name="recipe_delete_failed">无法删除食谱，请重试。</string>
+    <string name="recipe_restore_failed">无法恢复食谱。</string>
+    <string name="recipe_not_found">这份食谱已不在你的食谱库中。</string>
+    <string name="recipe_load_failed">无法加载这份食谱。</string>
+    <!-- 日期 -->
+    <string name="recipe_created">创建于 %1$s</string>
+    <!-- 日期 -->
+    <string name="recipe_updated">更新于 %1$s</string>
+    <!-- 已格式化的克数：“120” -->
+    <string name="recipe_ingredient_grams">%1$s 克</string>
+    <!-- 营养成分表算出的单个食材热量 -->
+    <plurals name="recipe_ingredient_kcal">
+        <item quantity="other">%1$d 千卡</item>
+    </plurals>
+    <!-- 未匹配到成分表时，模型对单个食材的热量估算 -->
+    <plurals name="recipe_ingredient_kcal_ai">
+        <item quantity="other">≈ %1$d 千卡（AI）</item>
+    </plurals>
 </resources>

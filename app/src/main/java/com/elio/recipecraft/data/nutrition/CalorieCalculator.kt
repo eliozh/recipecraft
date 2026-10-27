@@ -42,6 +42,16 @@ object CalorieCalculator {
         return Calories(total, perServing(total, recipe.servings), CalorieSource.DATABASE, aiTotal)
     }
 
+    /**
+     * The database kcal of each ingredient of [recipe], in order: grams × kcal / 100, rounded, from
+     * the first of [lookups] that matches it. Null for an ingredient without `grams` or with no match.
+     */
+    fun ingredientKcal(recipe: Recipe, lookups: List<NutritionLookup>): List<Int?> =
+        recipe.ingredients.map { ingredient ->
+            val grams = ingredient.grams ?: return@map null
+            ingredient.kcalPer100g(recipe, lookups)?.let { (grams * it / 100).roundToInt() }
+        }
+
     private fun Ingredient.kcalPer100g(recipe: Recipe, lookups: List<NutritionLookup>): Double? =
         lookups.firstNotNullOfOrNull { it.kcalPer100g(this, recipe.language) }
 

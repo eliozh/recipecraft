@@ -131,4 +131,29 @@ class CalorieCalculatorTest {
         assertEquals(321, CalorieCalculator.calculate(zh, listOf(chinese, usda)).total)
         assertEquals(304, CalorieCalculator.calculate(zh.copy(language = Language.EN), listOf(chinese, usda)).total)
     }
+
+    @Test
+    fun `ingredient kcal gives each matched ingredient its own figure, in order`() {
+        val kcal = CalorieCalculator.ingredientKcal(
+            recipe(
+                ingredient("rolled oats", 80.0),
+                ingredient("dragon fruit", 100.0, aiKcal = 60),
+                ingredient("salt", null),
+                ingredient("bananas", 118.0),
+            ),
+            listOf(usda),
+        )
+        // 80 g × 379 / 100 = 303.2; 118 g × 89 / 100 = 105.02
+        assertEquals(listOf(303, null, null, 105), kcal)
+    }
+
+    @Test
+    fun `ingredient kcal takes the first table that matches and the key that table uses`() {
+        val imported = TableLookup(IngredientMatcher(listOf(NutritionFood("香蕉", emptyList(), 100.0))), ::importedTableKey)
+        val banana = ingredient("banana", 50.0, name = "香蕉")
+        assertEquals(listOf(50), CalorieCalculator.ingredientKcal(recipe(banana, language = Language.ZH), listOf(imported, usda)))
+        // An English recipe matches the imported table on nameEn, which it lacks, so USDA answers.
+        assertEquals(listOf(45), CalorieCalculator.ingredientKcal(recipe(banana, language = Language.EN), listOf(imported, usda)))
+        assertEquals(listOf<Int?>(null), CalorieCalculator.ingredientKcal(recipe(banana), emptyList()))
+    }
 }

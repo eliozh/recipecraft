@@ -142,7 +142,7 @@ private fun Bullet(text: String) {
 }
 
 @Composable
-private fun StepRow(step: Step) {
+internal fun StepRow(step: Step) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("${step.index}.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
         Column {
@@ -159,7 +159,7 @@ private fun StepRow(step: Step) {
 }
 
 @Composable
-private fun ingredientLine(ingredient: Ingredient): String {
+internal fun ingredientLine(ingredient: Ingredient): String {
     val line = when {
         ingredient.quantity.isNotEmpty() ->
             stringResource(R.string.recipe_ingredient_line, ingredient.quantity, ingredient.unit, ingredient.name)
