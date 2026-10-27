@@ -10,4 +10,25 @@
     <string name="language_follow_system">跟随系统</string>
     <string name="language_english">English</string>
     <string name="language_chinese">中文</string>
+    <string name="settings_provider">AI 服务商</string>
+    <string name="provider_claude">Claude</string>
+    <string name="provider_openai">OpenAI</string>
+    <string name="provider_deepseek">DeepSeek</string>
+    <string name="provider_custom">自定义</string>
+    <string name="settings_base_url">接口地址</string>
+    <string name="base_url_required">请输入接口的基础地址。</string>
+    <string name="base_url_invalid">请输入完整地址，例如 https://api.example.com</string>
+    <string name="base_url_insecure">请使用 https:// 地址，以免 API 密钥以明文发送。</string>
+    <string name="settings_protocol">协议</string>
+    <string name="protocol_openai">兼容 OpenAI</string>
+    <string name="protocol_anthropic">兼容 Anthropic</string>
+    <string name="settings_model">模型</string>
+    <string name="model_required">开始聊天前请先填写模型。</string>
+    <string name="settings_api_key">API 密钥</string>
+    <string name="api_key_stored_hint">仅加密保存在本设备上。</string>
+    <string name="api_key_show">显示</string>
+    <string name="api_key_hide">隐藏</string>
+    <string name="api_key_clear">清除密钥</string>
+    <string name="settings_save_failed">保存失败，请重试。</string>
+    <string name="settings_load_failed">无法读取这些设置，请重试。</string>
 </resources>

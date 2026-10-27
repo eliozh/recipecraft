@@ -10,4 +10,25 @@
     <string name="language_follow_system">Follow system</string>
     <string name="language_english">English</string>
     <string name="language_chinese">中文</string>
+    <string name="settings_provider">AI provider</string>
+    <string name="provider_claude">Claude</string>
+    <string name="provider_openai">OpenAI</string>
+    <string name="provider_deepseek">DeepSeek</string>
+    <string name="provider_custom">Custom</string>
+    <string name="settings_base_url">Base URL</string>
+    <string name="base_url_required">Enter the endpoint\'s base URL.</string>
+    <string name="base_url_invalid">Enter a full URL, such as https://api.example.com</string>
+    <string name="base_url_insecure">Use an https:// URL so your API key is never sent unencrypted.</string>
+    <string name="settings_protocol">Protocol</string>
+    <string name="protocol_openai">OpenAI-compatible</string>
+    <string name="protocol_anthropic">Anthropic-compatible</string>
+    <string name="settings_model">Model</string>
+    <string name="model_required">Enter a model before you start chatting.</string>
+    <string name="settings_api_key">API key</string>
+    <string name="api_key_stored_hint">Stored encrypted on this device only.</string>
+    <string name="api_key_show">Show</string>
+    <string name="api_key_hide">Hide</string>
+    <string name="api_key_clear">Clear key</string>
+    <string name="settings_save_failed">Couldn\'t save. Try again.</string>
+    <string name="settings_load_failed">Couldn\'t load these settings. Try again.</string>
 </resources>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    API keys are sealed with a non-exportable Android Keystore key, so their ciphertexts are useless
+    on another device. Keep them out of every backup and transfer.
+    The path must match SettingsModule.SECRETS_FILE.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="datastore/secrets.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="datastore/secrets.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

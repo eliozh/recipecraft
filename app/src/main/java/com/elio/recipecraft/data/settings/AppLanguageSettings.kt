@@ -10,23 +10,34 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/** The user's app language choice and the language the UI resolves to. */
+interface AppLanguageSettings {
+    val choice: AppLanguage
+
+    /** The language the UI is shown in right now; prompts and translation follow it. */
+    val resolvedLanguage: Language
+
+    fun setChoice(choice: AppLanguage)
+}
+
 /**
  * Reads and applies the app language through the platform per-app locale API.
  * The system persists the per-app locale, so there is no local storage here.
  */
 @Singleton
-class AppLanguageSettings @Inject constructor(@ApplicationContext context: Context) {
+class LocaleManagerAppLanguageSettings @Inject constructor(
+    @ApplicationContext context: Context,
+) : AppLanguageSettings {
 
     private val localeManager = context.getSystemService(LocaleManager::class.java)
 
-    val choice: AppLanguage
+    override val choice: AppLanguage
         get() = LanguageResolver.choiceFromAppLocales(localeManager.applicationLocales.tags())
 
-    /** The language the UI is shown in right now; prompts and translation follow it. */
-    val resolvedLanguage: Language
+    override val resolvedLanguage: Language
         get() = LanguageResolver.resolve(choice, localeManager.systemLocales.tags())
 
-    fun setChoice(choice: AppLanguage) {
+    override fun setChoice(choice: AppLanguage) {
         localeManager.applicationLocales =
             LocaleList.forLanguageTags(LanguageResolver.appLocaleTagsFor(choice))
     }
