@@ -67,6 +67,7 @@ import com.elio.recipecraft.data.recipe.exportFileName
 import com.elio.recipecraft.domain.MealType
 import com.elio.recipecraft.domain.Recipe
 import com.elio.recipecraft.ui.LocalAppLayout
+import com.elio.recipecraft.ui.common.AppError
 import com.elio.recipecraft.ui.cover.CoverTopBar
 import com.elio.recipecraft.ui.cover.CoverTouchTarget
 import com.elio.recipecraft.ui.recipe.CaloriesLabel
@@ -129,7 +130,7 @@ fun LibraryScreen(
             }
             when {
                 state.loading -> Unit
-                state.loadFailed -> Message(stringResource(R.string.library_load_failed), LibraryTestTags.LOAD_FAILED)
+                state.loadFailed -> Message(stringResource(AppError.LIBRARY_LOAD_FAILED.message), LibraryTestTags.LOAD_FAILED)
                 state.libraryEmpty -> EmptyLibrary(onOpenChat)
                 else -> {
                     if (!cover) {
@@ -166,7 +167,7 @@ fun LibraryScreen(
     val exportResult = state.exportResult
     val exportMessage = when (exportResult) {
         is RecipeExportResult.Exported -> pluralStringResource(R.plurals.library_exported, exportResult.count, exportResult.count)
-        RecipeExportResult.Failed -> stringResource(R.string.library_export_failed)
+        RecipeExportResult.Failed -> stringResource(AppError.EXPORT_FAILED.message)
         null -> null
     }
     LaunchedEffect(exportResult) {
@@ -176,11 +177,12 @@ fun LibraryScreen(
             viewModel.onExportResultShown()
         }
     }
-    val restoreFailedMessage = stringResource(R.string.recipe_restore_failed)
+    val restoreFailedMessage = stringResource(AppError.RECIPE_RESTORE_FAILED.message)
     LaunchedEffect(state.restoreFailed) {
         if (state.restoreFailed) {
+            // As with the export result: cleared only once the snackbar is gone.
+            snackbarHostState.showSnackbar(restoreFailedMessage, withDismissAction = true, duration = SnackbarDuration.Long)
             viewModel.onRestoreFailedShown()
-            snackbarHostState.showSnackbar(restoreFailedMessage)
         }
     }
 }

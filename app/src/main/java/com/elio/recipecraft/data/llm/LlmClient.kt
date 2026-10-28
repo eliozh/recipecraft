@@ -1,6 +1,7 @@
 package com.elio.recipecraft.data.llm
 
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.takeWhile
 
 /** One chat turn sent to the model. */
 data class LlmMessage(val role: Role, val content: String) {
@@ -29,4 +30,44 @@ interface LlmClient {
 
     /** The model ids the provider offers, sorted. */
     suspend fun listModels(): ModelListResult
+}
+
+/**
+ * Collects one reply from [stream]: [onDelta] gets each piece of text as it arrives. While a
+ * rate-limited request waits to be sent again, [onRetryWait] gets the wait in whole seconds, then
+ * null once the next attempt answers. Returns the error that ended the reply, or null when it
+ * finished.
+ */
+suspend fun LlmClient.collectReply(
+    request: LlmRequest,
+    onRetryWait: (Int?) -> Unit = {},
+    onDelta: (String) -> Unit,
+): LlmErrorKind? {
+    var error: LlmErrorKind? = null
+    var waiting = false
+    stream(request)
+        .takeWhile { event ->
+            if (waiting && event !is LlmEvent.Retrying) {
+                waiting = false
+                onRetryWait(null)
+            }
+            when (event) {
+                is LlmEvent.Delta -> {
+                    onDelta(event.text)
+                    true
+                }
+                is LlmEvent.Retrying -> {
+                    waiting = true
+                    onRetryWait(event.delaySeconds)
+                    true
+                }
+                is LlmEvent.Done -> false
+                is LlmEvent.Error -> {
+                    error = event.kind
+                    false
+                }
+            }
+        }
+        .collect {}
+    return error
 }

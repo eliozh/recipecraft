@@ -42,6 +42,8 @@ data class RecipeDetailUiState(
     /** The language the app shows now; a recipe in another one offers Translate. */
     val appLanguage: Language = Language.EN,
     val translating: Boolean = false,
+    /** Set while a rate-limited translation waits this many seconds to be sent again. */
+    val translateRetryingInSeconds: Int? = null,
     /** Why the last Translate failed, until the screen has shown it. */
     val translateError: TranslationError? = null,
     /** Modify with AI, from the sheet to the preview of the result; null when closed. */
@@ -64,6 +66,8 @@ data class DetailModifyState(
     val running: Boolean = false,
     /** Why the last attempt failed; the sheet stays open to try again. */
     val error: ModifyError? = null,
+    /** Set while a rate-limited change waits this many seconds to be sent again. */
+    val retryingInSeconds: Int? = null,
     val preview: ModifyPreviewState? = null,
     /** True while Replace or Save as copy writes. */
     val saving: Boolean = false,
@@ -145,8 +149,10 @@ class RecipeDetailViewModel @Inject constructor(
         if (!state.canTranslate) return
         _uiState.update { it.copy(translating = true, translateError = null) }
         viewModelScope.launch {
-            val error = translations.translate(recipe, state.appLanguage)
-            _uiState.update { it.copy(translating = false, translateError = error) }
+            val error = translations.translate(recipe, state.appLanguage) { seconds ->
+                _uiState.update { it.copy(translateRetryingInSeconds = seconds) }
+            }
+            _uiState.update { it.copy(translating = false, translateRetryingInSeconds = null, translateError = error) }
         }
     }
 
@@ -175,13 +181,16 @@ class RecipeDetailViewModel @Inject constructor(
         if (!modify.canSend) return
         _uiState.update { it.copy(modify = modify.copy(running = true, error = null)) }
         modifyJob = viewModelScope.launch {
-            val result = recipeModifier.modify(recipe, modify.instruction)
+            val result = recipeModifier.modify(recipe, modify.instruction) { seconds ->
+                _uiState.update { state -> state.copy(modify = state.modify?.copy(retryingInSeconds = seconds)) }
+            }
             _uiState.update { current ->
                 val open = current.modify ?: return@update current
                 current.copy(
                     modify = when (result) {
-                        is ModifyResult.Success -> open.copy(running = false, preview = ModifyPreviewState(recipe, result.recipe))
-                        is ModifyResult.Failure -> open.copy(running = false, error = result.error)
+                        is ModifyResult.Success ->
+                            open.copy(running = false, retryingInSeconds = null, preview = ModifyPreviewState(recipe, result.recipe))
+                        is ModifyResult.Failure -> open.copy(running = false, retryingInSeconds = null, error = result.error)
                     },
                 )
             }

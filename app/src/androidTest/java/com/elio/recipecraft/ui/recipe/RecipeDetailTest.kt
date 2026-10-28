@@ -1,7 +1,14 @@
 package com.elio.recipecraft.ui.recipe
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import com.elio.recipecraft.ui.assertTouchHeightIsAtLeast
+import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.filterToOne
 import androidx.compose.ui.test.hasContentDescription
@@ -251,6 +258,49 @@ class RecipeDetailTest {
         waitForTag(LibraryTestTags.ITEM, 1)
         compose.onNodeWithText("Cheese omelette").assertExists()
         assertEquals(saved, runBlocking { database.recipes().all().single { it.id == omelette.id } })
+    }
+
+    @Test
+    fun aFailedTranslateShowsItsSnackbar() {
+        // The flag was once cleared before the snackbar showed, which cancelled it.
+        val chinese = omelette.copy(id = "zh-1", name = "芝士煎蛋卷", language = Language.ZH)
+        runBlocking { repository.save(listOf(chinese)) }
+        setContent()
+        waitForTag(LibraryTestTags.ITEM, 1)
+        compose.onNodeWithText("芝士煎蛋卷").performClick()
+        waitForTag(RecipeDetailTestTags.TRANSLATE)
+        compose.onNodeWithTag(RecipeDetailTestTags.TRANSLATE).performClick()
+
+        val message = context.getString(R.string.error_missing_key)
+        compose.waitUntil(5_000) { compose.onAllNodes(hasText(message)).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(message).assertIsDisplayed()
+    }
+
+    @Test
+    fun theLibraryAndDetailPassAccessibilityChecks() {
+        compose.enableAccessibilityChecks()
+        runBlocking { repository.save(listOf(omelette, toast)) }
+        setContent()
+        waitForTag(LibraryTestTags.ITEM, 2)
+        compose.onNodeWithText(context.getString(R.string.library_filter_all)).assertIsSelected().assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag(LibraryTestTags.MENU).assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithText("Cheese omelette").performClick()
+
+        waitForTag(RecipeDetailTestTags.NAME)
+        compose.onNodeWithTag(RecipeDetailTestTags.NAME).assert(isHeading())
+        compose.onNodeWithTag(RecipeDetailTestTags.INGREDIENTS).assert(isHeading())
+        compose.onNodeWithTag(RecipeDetailTestTags.BACK)
+            .assertContentDescriptionEquals(context.getString(R.string.action_back))
+            .assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag(RecipeDetailTestTags.SHARE)
+            .assertContentDescriptionEquals(context.getString(R.string.recipe_share))
+            .assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag(RecipeDetailTestTags.DELETE)
+            .assertContentDescriptionEquals(context.getString(R.string.recipe_delete))
+            .assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithTag(RecipeDetailTestTags.MODIFY).assertTouchHeightIsAtLeast(48.dp).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(ModifySheetTestTags.SHEET).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasText(context.getString(R.string.recipe_modify)) and isHeading()).assertExists()
     }
 
     @Test

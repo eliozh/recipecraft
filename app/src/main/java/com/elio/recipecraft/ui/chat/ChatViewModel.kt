@@ -11,7 +11,6 @@ import com.elio.recipecraft.data.llm.LlmClient
 import com.elio.recipecraft.data.llm.LlmClientFactory
 import com.elio.recipecraft.data.llm.LlmClientResult
 import com.elio.recipecraft.data.llm.LlmErrorKind
-import com.elio.recipecraft.data.llm.LlmEvent
 import com.elio.recipecraft.data.llm.LlmMessage
 import com.elio.recipecraft.data.llm.LlmRequest
 import com.elio.recipecraft.data.llm.ModifyError
@@ -23,6 +22,7 @@ import com.elio.recipecraft.data.llm.RecipeModifier
 import com.elio.recipecraft.data.llm.RecipeParseResult
 import com.elio.recipecraft.data.llm.RecipeParser
 import com.elio.recipecraft.data.llm.SetGrouping
+import com.elio.recipecraft.data.llm.collectReply
 import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.data.recipe.RecipeRepository
 import com.elio.recipecraft.domain.GenerationRequest
@@ -39,7 +39,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -62,9 +61,14 @@ data class ModifyState(
     val running: Boolean = false,
     /** Why the last attempt failed; the card was left as it was. */
     val error: ModifyError? = null,
+    /** Set while a rate-limited change waits this many seconds to be sent again. */
+    val retryingInSeconds: Int? = null,
 ) {
     val canSend: Boolean get() = !running && instruction.isNotBlank()
 }
+
+/** A chat deleted from the recent list; [wasOpen] when it was the chat on screen, so Undo opens it again. */
+data class PendingChatDelete(val conversation: Conversation, val wasOpen: Boolean)
 
 data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
@@ -74,6 +78,8 @@ data class ChatUiState(
     /** The id of the assistant message that is receiving deltas. */
     val streamingMessageId: Long? = null,
     val error: LlmErrorKind? = null,
+    /** Set while a rate-limited request waits this many seconds to be sent again. */
+    val retryingInSeconds: Int? = null,
     val composer: ComposerState = ComposerState(),
     /** Ids of the recipes already in the library, so their cards show Saved. */
     val savedIds: Set<String> = emptySet(),
@@ -90,7 +96,13 @@ data class ChatUiState(
     /** Every stored conversation, the latest first, for the recent chats list. */
     val conversations: List<Conversation> = emptyList(),
     val showRecent: Boolean = false,
+    /** The chat just deleted, while its snackbar can still undo it; it stays stored until then. */
+    val pendingDelete: PendingChatDelete? = null,
 ) {
+    /** The recent chats list, without the one waiting to be deleted. */
+    val visibleConversations: List<Conversation>
+        get() = pendingDelete?.let { pending -> conversations.filterNot { it.id == pending.conversation.id } } ?: conversations
+
     val canSend: Boolean get() = !sending && input.isNotBlank()
 
     fun isModified(recipeId: String): Boolean = history[recipeId].orEmpty().isNotEmpty()
@@ -200,11 +212,37 @@ class ChatViewModel @Inject constructor(
         enqueue { load(opened, id) }
     }
 
-    /** Deletes the stored conversation [id]; deleting the open one starts an empty chat. */
+    /**
+     * Deletes the stored conversation [id] from the list, and starts an empty chat when it was the
+     * open one. It is deleted from storage once its snackbar goes away without Undo, so Undo puts it
+     * back with its messages; deleting another chat first deletes this one for good.
+     */
     fun onDeleteConversation(id: Long) {
-        val open = id == _uiState.value.conversationId
-        enqueue { chats.delete(id) }
+        val state = _uiState.value
+        val conversation = state.conversations.firstOrNull { it.id == id } ?: return
+        commitPendingDelete()
+        val open = id == state.conversationId
+        _uiState.update { it.copy(pendingDelete = PendingChatDelete(conversation, open)) }
         if (open) resetChat(keepRecentOpen = true)
+    }
+
+    /** Undo on the snackbar: the chat comes back, and opens again if it was open and nothing new was started. */
+    fun onUndoDeleteConversation(pending: PendingChatDelete) {
+        if (_uiState.value.pendingDelete != pending) return
+        _uiState.update { it.copy(pendingDelete = null) }
+        val state = _uiState.value
+        if (pending.wasOpen && state.messages.isEmpty() && !state.sending) onOpenConversation(pending.conversation.id)
+    }
+
+    /** The snackbar went away without Undo, so the chat is deleted from storage. */
+    fun onDeleteConversationShown(pending: PendingChatDelete) {
+        if (_uiState.value.pendingDelete == pending) commitPendingDelete()
+    }
+
+    private fun commitPendingDelete() {
+        val pending = _uiState.value.pendingDelete ?: return
+        _uiState.update { it.copy(pendingDelete = null) }
+        enqueue { chats.delete(pending.conversation.id) }
     }
 
     /** Runs the preset chip's [action]: sends its request or text at once, or puts its text in the input. */
@@ -336,7 +374,10 @@ class ChatViewModel @Inject constructor(
         if (!modify.canSend || recipe == null) return
         _uiState.update { it.copy(modify = modify.copy(running = true, error = null)) }
         modifyJob = viewModelScope.launch {
-            when (val result = recipeModifier.modify(recipe, modify.instruction)) {
+            val result = recipeModifier.modify(recipe, modify.instruction) { seconds ->
+                _uiState.update { state -> state.copy(modify = state.modify?.copy(retryingInSeconds = seconds)) }
+            }
+            when (result) {
                 is ModifyResult.Success -> {
                     _uiState.update { state ->
                         state.replaceRecipe(modify.messageId, result.recipe).copy(
@@ -347,7 +388,7 @@ class ChatViewModel @Inject constructor(
                     persist(modify.messageId)
                 }
                 is ModifyResult.Failure -> _uiState.update { state ->
-                    state.copy(modify = state.modify?.copy(running = false, error = result.error))
+                    state.copy(modify = state.modify?.copy(running = false, error = result.error, retryingInSeconds = null))
                 }
             }
         }
@@ -425,7 +466,7 @@ class ChatViewModel @Inject constructor(
 
     /** Streams the reply to [prompt]; [request] is the composer request it answers, null for free-form chat. */
     private suspend fun reply(client: LlmClient, prompt: Prompt, replyId: Long, request: GenerationRequest?) {
-        val error = client.collectReply(prompt.request) { delta -> appendDelta(replyId, delta) }
+        val error = client.collectReply(prompt.request, ::onRetryWait) { delta -> appendDelta(replyId, delta) }
         if (error != null) {
             _uiState.update { it.copy(error = error) }
             return
@@ -454,7 +495,7 @@ class ChatViewModel @Inject constructor(
         updateMessage(replyId) { it.copy(recipeStatus = RecipeStatus.REPAIRING) }
         val prompt = promptBuilder.repair(reply, failure.description, language)
         val repaired = StringBuilder()
-        val error = client.collectReply(prompt.request) { repaired.append(it) }
+        val error = client.collectReply(prompt.request, ::onRetryWait) { repaired.append(it) }
         val result = if (error == null) parser.parse(repaired.toString()) else null
         if (result is RecipeParseResult.Success) {
             showRecipes(replyId, result.copy(prose = parser.streaming(reply).prose), language, request)
@@ -496,25 +537,8 @@ class ChatViewModel @Inject constructor(
         persistPartial(replyId)
     }
 
-    /** Collects one reply; returns the error that ended it, or null when it finished. */
-    private suspend fun LlmClient.collectReply(request: LlmRequest, onDelta: (String) -> Unit): LlmErrorKind? {
-        var error: LlmErrorKind? = null
-        stream(request)
-            .takeWhile { event ->
-                when (event) {
-                    is LlmEvent.Delta -> {
-                        onDelta(event.text)
-                        true
-                    }
-                    is LlmEvent.Done -> false
-                    is LlmEvent.Error -> {
-                        error = event.kind
-                        false
-                    }
-                }
-            }
-            .collect {}
-        return error
+    private fun onRetryWait(seconds: Int?) {
+        _uiState.update { it.copy(retryingInSeconds = seconds) }
     }
 
     private fun message(id: Long) = _uiState.value.messages.firstOrNull { it.id == id }
@@ -542,6 +566,7 @@ class ChatViewModel @Inject constructor(
                     .map { if (it.id == replyId) it.cutOff(end) else it },
                 sending = false,
                 streamingMessageId = null,
+                retryingInSeconds = null,
             )
         }
         if (replyId != null) persist(replyId)
@@ -560,6 +585,7 @@ class ChatViewModel @Inject constructor(
                 savedIds = it.savedIds,
                 conversations = it.conversations,
                 showRecent = keepRecentOpen && it.showRecent,
+                pendingDelete = it.pendingDelete,
             )
         }
     }

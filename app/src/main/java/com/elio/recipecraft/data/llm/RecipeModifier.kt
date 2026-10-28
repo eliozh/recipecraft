@@ -4,8 +4,6 @@ import com.elio.recipecraft.data.nutrition.NutritionLookups
 import com.elio.recipecraft.domain.Recipe
 import java.time.Clock
 import javax.inject.Inject
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.takeWhile
 
 /** Why a recipe could not be changed; the recipe is left as it was. */
 sealed interface ModifyError {
@@ -41,17 +39,18 @@ class RecipeModifier @Inject constructor(
     private val clock: Clock,
 ) {
 
-    suspend fun modify(recipe: Recipe, instruction: String): ModifyResult {
+    /** [onRetryWait] gets the seconds a rate-limit wait lasts, then null once the model answers. */
+    suspend fun modify(recipe: Recipe, instruction: String, onRetryWait: (Int?) -> Unit = {}): ModifyResult {
         val client = when (val result = clientFactory.forActiveProvider()) {
             is LlmClientResult.Ready -> result.client
             is LlmClientResult.Unavailable -> return ModifyResult.Failure(ModifyError.Llm(result.kind))
         }
         val prompt = promptBuilder.modify(recipe, instruction)
-        val reply = client.collect(prompt.request)
+        val reply = client.collect(prompt.request, onRetryWait)
         reply.error?.let { return ModifyResult.Failure(ModifyError.Llm(it)) }
         val wire = when (val parsed = parser.parse(reply.text)) {
             is RecipeParseResult.Success -> parsed.batch.recipes.first()
-            is RecipeParseResult.Failure -> repair(client, reply.text, parsed, prompt)
+            is RecipeParseResult.Failure -> repair(client, reply.text, parsed, prompt, onRetryWait)
                 ?: return ModifyResult.Failure(ModifyError.Rejected)
         }
         return ModifyResult.Success(merge(recipe, wire))
@@ -63,9 +62,10 @@ class RecipeModifier @Inject constructor(
         reply: String,
         failure: RecipeParseResult.Failure,
         prompt: Prompt,
+        onRetryWait: (Int?) -> Unit,
     ): RecipeWire? {
         val repair = promptBuilder.repair(reply, failure.description, prompt.language)
-        val repaired = client.collect(repair.request)
+        val repaired = client.collect(repair.request, onRetryWait)
         if (repaired.error != null) return null
         return (parser.parse(repaired.text) as? RecipeParseResult.Success)?.batch?.recipes?.first()
     }
@@ -85,24 +85,9 @@ class RecipeModifier @Inject constructor(
 
     private class Reply(val text: String, val error: LlmErrorKind?)
 
-    private suspend fun LlmClient.collect(request: LlmRequest): Reply {
+    private suspend fun LlmClient.collect(request: LlmRequest, onRetryWait: (Int?) -> Unit): Reply {
         val text = StringBuilder()
-        var error: LlmErrorKind? = null
-        stream(request)
-            .takeWhile { event ->
-                when (event) {
-                    is LlmEvent.Delta -> {
-                        text.append(event.text)
-                        true
-                    }
-                    is LlmEvent.Done -> false
-                    is LlmEvent.Error -> {
-                        error = event.kind
-                        false
-                    }
-                }
-            }
-            .collect()
+        val error = collectReply(request, onRetryWait) { text.append(it) }
         return Reply(text.toString(), error)
     }
 }

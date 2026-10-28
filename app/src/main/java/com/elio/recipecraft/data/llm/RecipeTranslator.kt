@@ -4,8 +4,6 @@ import com.elio.recipecraft.domain.Language
 import com.elio.recipecraft.domain.Recipe
 import java.time.Clock
 import javax.inject.Inject
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.takeWhile
 
 /** Why a recipe could not be translated; the recipe is left as it was. */
 sealed interface TranslationError {
@@ -36,25 +34,16 @@ class RecipeTranslator @Inject constructor(
     private val clock: Clock,
 ) {
 
-    suspend fun translate(recipe: Recipe, target: Language, client: LlmClient): TranslationResult {
+    /** [onRetryWait] gets the seconds a rate-limit wait lasts, then null once the model answers. */
+    suspend fun translate(
+        recipe: Recipe,
+        target: Language,
+        client: LlmClient,
+        onRetryWait: (Int?) -> Unit = {},
+    ): TranslationResult {
         val prompt = promptBuilder.translate(recipe.toWireJson().toString(), target)
         val reply = StringBuilder()
-        var error: LlmErrorKind? = null
-        client.stream(prompt.request)
-            .takeWhile { event ->
-                when (event) {
-                    is LlmEvent.Delta -> {
-                        reply.append(event.text)
-                        true
-                    }
-                    is LlmEvent.Done -> false
-                    is LlmEvent.Error -> {
-                        error = event.kind
-                        false
-                    }
-                }
-            }
-            .collect()
+        val error = client.collectReply(prompt.request, onRetryWait) { reply.append(it) }
         error?.let { return TranslationResult.Failure(TranslationError.Llm(it)) }
         val wire = (parser.parse(reply.toString()) as? RecipeParseResult.Success)?.batch?.recipes?.singleOrNull()
             ?: return TranslationResult.Failure(TranslationError.Rejected)

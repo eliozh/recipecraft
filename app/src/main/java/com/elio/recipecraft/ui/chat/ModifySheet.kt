@@ -22,12 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.llm.ModifyError
 import com.elio.recipecraft.ui.common.modifyErrorText
+import com.elio.recipecraft.ui.common.retryingText
 
 /** A quick instruction: [label] on the chip, [text] what it adds to the instruction. */
 private enum class ModifyChip(@StringRes val label: Int, @StringRes val text: Int) {
@@ -53,6 +56,8 @@ fun ModifySheet(
     onInstructionChanged: (String) -> Unit,
     onSend: () -> Unit,
     onCancel: () -> Unit,
+    /** Set while a rate-limited change waits this many seconds to be sent again. */
+    retryingInSeconds: Int? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onCancel,
@@ -97,6 +102,14 @@ fun ModifySheet(
                     modifier = Modifier.testTag(ModifySheetTestTags.ERROR),
                 )
             }
+            if (running && retryingInSeconds != null) {
+                Text(
+                    retryingText(retryingInSeconds),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }.testTag(ModifySheetTestTags.RETRYING),
+                )
+            }
             if (running) LinearProgressIndicator(Modifier.fillMaxWidth().testTag(ModifySheetTestTags.PROGRESS))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onCancel, modifier = Modifier.testTag(ModifySheetTestTags.CANCEL)) {
@@ -126,6 +139,7 @@ object ModifySheetTestTags {
     const val INSTRUCTION = "modify_instruction"
     const val ERROR = "modify_error"
     const val PROGRESS = "modify_progress"
+    const val RETRYING = "modify_retrying"
     const val CANCEL = "modify_cancel"
     const val SEND = "modify_send"
 }

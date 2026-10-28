@@ -25,6 +25,6 @@
 - [x] T16 Export, import, and share
 - [x] T17 Adaptive and full-screen layouts and Android 17 compliance
 - [x] T18 Samsung Z Flip 8 cover-screen layout and Cook mode (real device)
-- [ ] T19 Error messages and accessibility
+- [x] T19 Error messages and accessibility
 - [ ] T20 Release build and About screen (R8, signing, disclaimer, USDA attribution)
 - [ ] Checkpoint C: all SPEC.md success criteria met; release build verified on the Z Flip 8; human review

@@ -59,6 +59,9 @@ sealed interface ModelFetchState {
     data class Failed(val kind: LlmErrorKind) : ModelFetchState
 }
 
+/** The parts of the provider settings that are saved separately, so each save can fail on its own. */
+enum class SettingsField { ACTIVE_PROVIDER, PROVIDER_CONFIG, API_KEY }
+
 data class SettingsUiState(
     val language: AppLanguage = AppLanguage.FOLLOW_SYSTEM,
     val activeProvider: ProviderType = ProviderDefaults.activeProvider,
@@ -67,11 +70,20 @@ data class SettingsUiState(
     val keyVisible: Boolean = false,
     val loading: Boolean = true,
     val loadFailed: Boolean = false,
-    val saveFailed: Boolean = false,
+    /** The fields whose last save failed; each stays until that field saves. */
+    val failedSaves: Set<SettingsField> = emptySet(),
     val connectionTest: ConnectionTestState = ConnectionTestState.Idle,
     val modelFetch: ModelFetchState = ModelFetchState.Idle,
 ) {
     val problems: Set<ConfigProblem> get() = config.problems()
+
+    val saveFailed: Boolean get() = failedSaves.isNotEmpty()
+
+    /**
+     * The provider fields take edits only once the provider's saved settings are loaded: after a
+     * failed load they show defaults, and saving those would overwrite what is stored.
+     */
+    val editable: Boolean get() = !loading && !loadFailed
 }
 
 @HiltViewModel
@@ -125,10 +137,13 @@ class SettingsViewModel @Inject constructor(
         resetNetworkChecks()
         _uiState.update { it.copy(activeProvider = type, loading = true, keyVisible = false) }
         enqueue {
-            save { settingsRepository.setActiveProvider(type) }
+            save(SettingsField.ACTIVE_PROVIDER) { settingsRepository.setActiveProvider(type) }
             loadProvider(type)
         }
     }
+
+    /** Retry after a failed load. */
+    fun onRetryLoad() = retryFailedLoad()
 
     fun onModelChanged(model: String) = updateConfig { it.copy(model = model) }
 
@@ -137,10 +152,11 @@ class SettingsViewModel @Inject constructor(
     fun onProtocolSelected(protocol: Protocol) = updateConfig { it.copy(protocol = protocol) }
 
     fun onApiKeyChanged(key: String) {
+        if (_uiState.value.loadFailed) return
         val type = _uiState.value.activeProvider
         resetNetworkChecks()
-        _uiState.update { it.copy(apiKey = Secret(key), saveFailed = false) }
-        enqueue { save { secretStore.setKey(type, key) } }
+        _uiState.update { it.copy(apiKey = Secret(key)) }
+        enqueue { save(SettingsField.API_KEY) { secretStore.setKey(type, key) } }
     }
 
     fun onClearApiKey() = onApiKeyChanged("")
@@ -157,6 +173,8 @@ class SettingsViewModel @Inject constructor(
             is LlmClientResult.Unavailable -> ConnectionTestState.Failed(result.kind)
             is LlmClientResult.Ready -> when (val event = result.client.stream(PING).first()) {
                 is LlmEvent.Error -> ConnectionTestState.Failed(event.kind)
+                // A check reports a rate limit at once rather than waiting to try again.
+                is LlmEvent.Retrying -> ConnectionTestState.Failed(LlmErrorKind.RateLimited)
                 is LlmEvent.Delta, is LlmEvent.Done -> ConnectionTestState.Succeeded
             }
         }
@@ -207,10 +225,11 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun updateConfig(change: (ProviderConfig) -> ProviderConfig) {
+        if (_uiState.value.loadFailed) return
         resetNetworkChecks()
         val config = change(_uiState.value.config)
-        _uiState.update { it.copy(config = config, saveFailed = false) }
-        enqueue { save { settingsRepository.updateProviderConfig(config) } }
+        _uiState.update { it.copy(config = config) }
+        enqueue { save(SettingsField.PROVIDER_CONFIG) { settingsRepository.updateProviderConfig(config) } }
     }
 
     private fun retryFailedLoad() {
@@ -230,7 +249,7 @@ class SettingsViewModel @Inject constructor(
             null
         }
         _uiState.update {
-            // On failure, show defaults for this provider so edits go to the right place.
+            // On failure, show defaults for this provider, read-only until a retry loads the real ones.
             val (config, key) = loaded ?: (ProviderDefaults.config(type) to "")
             it.copy(
                 activeProvider = type,
@@ -238,18 +257,22 @@ class SettingsViewModel @Inject constructor(
                 apiKey = Secret(key),
                 loading = false,
                 loadFailed = loaded == null,
+                // A failed key or config save was for the provider shown before; what is stored now shows instead.
+                failedSaves = if (loaded == null) it.failedSaves else it.failedSaves - PROVIDER_FIELDS,
             )
         }
     }
 
-    private suspend fun save(write: suspend () -> Unit) {
-        try {
+    private suspend fun save(field: SettingsField, write: suspend () -> Unit) {
+        val saved = try {
             write()
+            true
         } catch (_: IOException) {
-            _uiState.update { it.copy(saveFailed = true) }
+            false
         } catch (_: GeneralSecurityException) {
-            _uiState.update { it.copy(saveFailed = true) }
+            false
         }
+        _uiState.update { it.copy(failedSaves = if (saved) it.failedSaves - field else it.failedSaves + field) }
     }
 
     private fun enqueue(operation: suspend () -> Unit) {
@@ -258,5 +281,8 @@ class SettingsViewModel @Inject constructor(
 
     private companion object {
         val PING = LlmRequest(listOf(LlmMessage(LlmMessage.Role.USER, "ping")))
+
+        /** The fields saved per provider. */
+        val PROVIDER_FIELDS = setOf(SettingsField.PROVIDER_CONFIG, SettingsField.API_KEY)
     }
 }

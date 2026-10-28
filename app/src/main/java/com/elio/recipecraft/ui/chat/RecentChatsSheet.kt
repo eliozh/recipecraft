@@ -13,6 +13,8 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,6 +40,8 @@ fun RecentChatsSheet(
     onOpen: (Long) -> Unit,
     onDelete: (Long) -> Unit,
     onDismiss: () -> Unit,
+    /** Shows the Undo snackbar of a deleted chat inside the sheet, above its scrim. */
+    snackbarHostState: SnackbarHostState? = null,
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -58,7 +62,7 @@ fun RecentChatsSheet(
             )
         }
         val context = LocalContext.current
-        LazyColumn(Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false).padding(bottom = 16.dp)) {
             items(conversations, key = { it.id }) { conversation ->
                 val open = conversation.id == openId
                 ListItem(
@@ -97,6 +101,7 @@ fun RecentChatsSheet(
                 )
             }
         }
+        snackbarHostState?.let { SnackbarHost(it, Modifier.fillMaxWidth()) }
     }
 }
 

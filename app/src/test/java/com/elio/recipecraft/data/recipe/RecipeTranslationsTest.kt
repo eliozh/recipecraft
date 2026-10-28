@@ -207,6 +207,31 @@ class RecipeTranslationsTest {
     }
 
     @Test
+    fun `the batch shows a rate-limit wait on the recipe it is translating`() = runTest(UnconfinedTestDispatcher()) {
+        saveEnglish()
+        val translations = translations()
+        client.events.trySend(LlmEvent.Retrying(1, 3_000))
+
+        translations.startBatch(Language.ZH)
+        assertEquals(Running(1, 3, retryingInSeconds = 3), translations.batch.value)
+
+        client.events.trySend(LlmEvent.Error(LlmErrorKind.RateLimited))
+        assertEquals(Finished(0, 3, cancelled = false, error = TranslationError.Llm(LlmErrorKind.RateLimited)), translations.batch.value)
+    }
+
+    @Test
+    fun `one recipe reports a rate-limit wait, then clears it when the reply starts`() = runTest(UnconfinedTestDispatcher()) {
+        val before = saveEnglish()
+        val translations = translations()
+        client.events.trySend(LlmEvent.Retrying(1, 2_000))
+        reply(translatedReply(english[1]))
+        val waits = mutableListOf<Int?>()
+
+        assertNull(translations.translate(before[1], Language.ZH) { waits += it })
+        assertEquals(listOf(2, null), waits)
+    }
+
+    @Test
     fun `one recipe is translated and saved in place`() = runTest(UnconfinedTestDispatcher()) {
         val before = saveEnglish()
         val translations = translations()

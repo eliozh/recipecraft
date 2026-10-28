@@ -165,6 +165,34 @@ class ChatViewModelTest {
     }
 
     @Test
+    fun `a rate-limit wait is shown until the reply starts, and cleared when it ends`() = runTest {
+        val vm = newViewModel()
+        vm.send("Hi")
+        client.events.send(LlmEvent.Retrying(1, 1_500))
+        assertEquals(2, vm.uiState.value.retryingInSeconds)
+        assertTrue(vm.uiState.value.sending)
+
+        client.events.send(LlmEvent.Delta("Hello"))
+        assertNull(vm.uiState.value.retryingInSeconds)
+        client.events.send(LlmEvent.Retrying(2, 3_000))
+        vm.onStop()
+        assertNull(vm.uiState.value.retryingInSeconds)
+    }
+
+    @Test
+    fun `a modify that waits out a rate limit shows the wait`() = runTest {
+        val vm = newViewModel()
+        val message = twoDays(vm)
+        val recipe = message.recipes.first()
+        vm.modify(message, recipe, "Make it vegetarian")
+        client.events.send(LlmEvent.Retrying(1, 4_000))
+        assertEquals(4, vm.uiState.value.modify?.retryingInSeconds)
+        client.events.send(LlmEvent.Error(LlmErrorKind.RateLimited))
+        assertNull(vm.uiState.value.modify?.retryingInSeconds)
+        assertFalse(vm.uiState.value.modify!!.running)
+    }
+
+    @Test
     fun `an error after some text keeps the partial reply`() = runTest {
         val vm = newViewModel()
         vm.send("Hi")
@@ -980,16 +1008,65 @@ class ChatViewModelTest {
         val secondId = vm.uiState.value.conversationId!!
 
         vm.onDeleteConversation(firstId)
-        assertEquals(listOf(secondId), vm.uiState.value.conversations.map { it.id })
+        assertEquals(listOf(secondId), vm.uiState.value.visibleConversations.map { it.id })
         assertEquals(secondId, vm.uiState.value.conversationId)
-
+        // Deleting another chat deletes the pending one for good.
         vm.onShowRecent()
         vm.onDeleteConversation(secondId)
-        assertTrue(vm.uiState.value.conversations.isEmpty())
+        assertEquals(listOf(secondId), vm.uiState.value.conversations.map { it.id })
+        assertTrue(vm.uiState.value.visibleConversations.isEmpty())
         assertTrue(vm.uiState.value.messages.isEmpty())
         assertNull(vm.uiState.value.conversationId)
         assertTrue(vm.uiState.value.showRecent)
+
+        vm.onDeleteConversationShown(vm.uiState.value.pendingDelete!!)
+        assertNull(vm.uiState.value.pendingDelete)
+        assertTrue(vm.uiState.value.conversations.isEmpty())
         assertTrue(chatDao.messages.isEmpty())
+    }
+
+    @Test
+    fun `undo puts a deleted chat back with its messages and opens it again`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        reply("First")
+        val id = vm.uiState.value.conversationId!!
+        val messages = vm.uiState.value.messages
+
+        vm.onShowRecent()
+        vm.onDeleteConversation(id)
+        val pending = vm.uiState.value.pendingDelete!!
+        assertTrue(pending.wasOpen)
+        assertTrue(vm.uiState.value.visibleConversations.isEmpty())
+        assertTrue(vm.uiState.value.messages.isEmpty())
+
+        vm.onUndoDeleteConversation(pending)
+        assertNull(vm.uiState.value.pendingDelete)
+        assertEquals(listOf(id), vm.uiState.value.visibleConversations.map { it.id })
+        assertEquals(id, vm.uiState.value.conversationId)
+        assertEquals(messages.map { it.text }, vm.uiState.value.messages.map { it.text })
+        assertTrue(chatDao.messages.isNotEmpty())
+
+        // A late dismissal of the undone snackbar deletes nothing.
+        vm.onDeleteConversationShown(pending)
+        assertEquals(listOf(id), vm.uiState.value.conversations.map { it.id })
+    }
+
+    @Test
+    fun `undo of a chat that was not open keeps the chat on screen`() = runTest {
+        val vm = newViewModel()
+        vm.send("One")
+        reply("First")
+        val firstId = vm.uiState.value.conversationId!!
+        vm.onNewChat()
+        vm.send("Two")
+        reply("Second")
+        val secondId = vm.uiState.value.conversationId!!
+
+        vm.onDeleteConversation(firstId)
+        vm.onUndoDeleteConversation(vm.uiState.value.pendingDelete!!)
+        assertEquals(secondId, vm.uiState.value.conversationId)
+        assertEquals(setOf(firstId, secondId), vm.uiState.value.visibleConversations.map { it.id }.toSet())
     }
 
     @Test

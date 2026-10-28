@@ -55,6 +55,8 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 androidx-test-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidxTestEspresso" }
 androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
 androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+# Versioned by the Compose BOM; runs the Accessibility Test Framework checks in Compose tests.
+androidx-compose-ui-test-junit4-accessibility = { group = "androidx.compose.ui", name = "ui-test-junit4-accessibility" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

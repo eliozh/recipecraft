@@ -2,7 +2,6 @@ package com.elio.recipecraft.ui.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -25,14 +24,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.nutrition.NutritionTableSummary
-import com.elio.recipecraft.data.nutrition.RowError
-import com.elio.recipecraft.data.nutrition.TableImportError
 import com.elio.recipecraft.data.nutrition.TableImportResult
+import com.elio.recipecraft.ui.common.AppError
+import com.elio.recipecraft.ui.common.ErrorMessages
 
 /** Some providers label CSV files as plain text or as unknown binary, so those are offered too. */
 private val CSV_MIME_TYPES = arrayOf("text/csv", "text/comma-separated-values", "text/plain", "application/octet-stream")
@@ -81,7 +82,7 @@ fun NutritionTables(
         Text(
             text = stringResource(R.string.settings_nutrition_tables),
             style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(vertical = 8.dp),
+            modifier = Modifier.padding(vertical = 8.dp).semantics { heading() },
         )
         Text(
             text = stringResource(R.string.nutrition_tables_hint),
@@ -106,8 +107,8 @@ fun NutritionTables(
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(vertical = 4.dp))
         }
         state.lastImport?.let { (name, result) -> ImportSummary(name, result, onDismissImportSummary) }
-        if (state.actionFailed) ErrorText(stringResource(R.string.nutrition_tables_action_failed))
-        if (state.loadFailed) ErrorText(stringResource(R.string.nutrition_tables_load_failed))
+        if (state.actionFailed) ErrorText(stringResource(AppError.TABLES_ACTION_FAILED.message))
+        if (state.loadFailed) ErrorText(stringResource(AppError.TABLES_LOAD_FAILED.message))
 
         if (state.tables.isEmpty() && !state.loadFailed) {
             Text(
@@ -198,14 +199,14 @@ private fun ImportSummary(name: String, result: TableImportResult, onDismiss: ()
                 }
                 result.problems.forEach { problem ->
                     Text(
-                        text = stringResource(R.string.nutrition_tables_row_problem, problem.row, stringResource(problem.error.textRes)),
+                        text = stringResource(R.string.nutrition_tables_row_problem, problem.row, stringResource(ErrorMessages.row(problem.error))),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             is TableImportResult.Failed -> {
-                ErrorText(stringResource(result.error.textRes))
+                ErrorText(stringResource(ErrorMessages.tableImport(result.error)))
                 if (result.skipped > 0) {
                     ErrorText(pluralStringResource(R.plurals.nutrition_tables_skipped, result.skipped, result.skipped))
                 }
@@ -242,26 +243,3 @@ private fun NameDialog(name: String, onNameChanged: (String) -> Unit, onConfirm:
 private fun ErrorText(text: String) {
     Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
 }
-
-@get:StringRes
-private val RowError.textRes: Int
-    get() = when (this) {
-        RowError.WRONG_COLUMN_COUNT -> R.string.row_error_wrong_column_count
-        RowError.MISSING_NAME -> R.string.row_error_missing_name
-        RowError.INVALID_KCAL -> R.string.row_error_invalid_kcal
-        RowError.KCAL_TOO_HIGH -> R.string.row_error_kcal_too_high
-        RowError.DUPLICATE_NAME -> R.string.row_error_duplicate_name
-        RowError.BAD_QUOTES -> R.string.row_error_bad_quotes
-    }
-
-@get:StringRes
-private val TableImportError.textRes: Int
-    get() = when (this) {
-        TableImportError.EMPTY -> R.string.import_error_empty
-        TableImportError.WRONG_HEADER -> R.string.import_error_wrong_header
-        TableImportError.TOO_LARGE -> R.string.import_error_too_large
-        TableImportError.NOT_UTF8 -> R.string.import_error_not_utf8
-        TableImportError.NO_VALID_ROWS -> R.string.import_error_no_valid_rows
-        TableImportError.UNREADABLE -> R.string.import_error_unreadable
-        TableImportError.SAVE_FAILED -> R.string.import_error_save_failed
-    }

@@ -8,6 +8,7 @@ import com.elio.recipecraft.data.settings.SettingsRepository
 import com.elio.recipecraft.data.settings.problems
 import java.io.IOException
 import java.security.GeneralSecurityException
+import java.time.Clock
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.first
@@ -36,6 +37,8 @@ class DefaultLlmClientFactory @Inject constructor(
     private val secretStore: SecretStore,
     private val httpClient: OkHttpClient,
     private val json: Json,
+    private val retryPolicy: RetryPolicy = RetryPolicy(),
+    private val clock: Clock = Clock.systemUTC(),
 ) : LlmClientFactory {
 
     override suspend fun forActiveProvider(requireModel: Boolean): LlmClientResult {
@@ -65,10 +68,11 @@ class DefaultLlmClientFactory @Inject constructor(
         }
         val model = config.model.trim()
         val client = when (config.protocol) {
-            Protocol.OPENAI_COMPATIBLE -> OpenAiCompatibleClient(baseUrl, model, key, httpClient, json)
-            Protocol.ANTHROPIC -> AnthropicClient(baseUrl, model, key, httpClient, json)
+            Protocol.OPENAI_COMPATIBLE -> OpenAiCompatibleClient(baseUrl, model, key, httpClient, json, clock)
+            Protocol.ANTHROPIC -> AnthropicClient(baseUrl, model, key, httpClient, json, clock)
         }
-        return LlmClientResult.Ready(client)
+        // Every request made through the factory waits out a rate limit before it fails.
+        return LlmClientResult.Ready(RetryingLlmClient(client, retryPolicy))
     }
 
     private fun unavailableReason(problems: Set<ConfigProblem>, requireModel: Boolean): LlmErrorKind? = when {

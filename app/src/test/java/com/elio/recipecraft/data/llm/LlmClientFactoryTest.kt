@@ -34,7 +34,7 @@ class LlmClientFactoryTest {
         val result = factory.forActiveProvider()
 
         assertTrue(result is LlmClientResult.Ready)
-        assertTrue((result as LlmClientResult.Ready).client is OpenAiCompatibleClient)
+        assertTrue(((result as LlmClientResult.Ready).client as RetryingLlmClient).delegate is OpenAiCompatibleClient)
     }
 
     @Test
@@ -72,7 +72,7 @@ class LlmClientFactoryTest {
         val result = factory.forActiveProvider()
 
         assertTrue(result is LlmClientResult.Ready)
-        assertTrue((result as LlmClientResult.Ready).client is AnthropicClient)
+        assertTrue(((result as LlmClientResult.Ready).client as RetryingLlmClient).delegate is AnthropicClient)
     }
 
     @Test
@@ -83,8 +83,8 @@ class LlmClientFactoryTest {
         val anthropic = factory.forConfig(custom) as LlmClientResult.Ready
         val openAi = factory.forConfig(custom.copy(protocol = Protocol.OPENAI_COMPATIBLE)) as LlmClientResult.Ready
 
-        assertTrue(anthropic.client is AnthropicClient)
-        assertTrue(openAi.client is OpenAiCompatibleClient)
+        assertTrue((anthropic.client as RetryingLlmClient).delegate is AnthropicClient)
+        assertTrue((openAi.client as RetryingLlmClient).delegate is OpenAiCompatibleClient)
     }
 
     @Test

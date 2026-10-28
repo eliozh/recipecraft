@@ -1,5 +1,6 @@
 package com.elio.recipecraft.data.llm
 
+import java.time.Clock
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -29,6 +30,8 @@ class OpenAiCompatibleClient(
     private val apiKey: String,
     private val httpClient: OkHttpClient,
     private val json: Json,
+    /** Reads a `Retry-After` header that is a date. */
+    private val clock: Clock = Clock.systemUTC(),
 ) : LlmClient {
 
     private val chatUrl = baseUrl.resolvePath("chat/completions")
@@ -78,7 +81,7 @@ class OpenAiCompatibleClient(
             )
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) =
-                finish(LlmEvent.Error(errorKind(t, response)))
+                finish(LlmEvent.Error(errorKind(t, response), retryAfterMillis(response, clock)))
 
             private fun finish(event: LlmEvent) {
                 trySend(event)

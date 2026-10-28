@@ -1,6 +1,5 @@
 package com.elio.recipecraft.ui.library
 
-import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,8 +22,8 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.elio.recipecraft.R
-import com.elio.recipecraft.data.recipe.RecipeImportError
 import com.elio.recipecraft.data.recipe.RecipeImportResult
+import com.elio.recipecraft.ui.common.ErrorMessages
 
 /** The JSON type Export asks the picker for. */
 internal const val EXPORT_MIME_TYPE = "application/json"
@@ -86,7 +85,7 @@ internal fun ImportSummaryDialog(result: RecipeImportResult, onDismiss: () -> Un
                             Text(pluralStringResource(R.plurals.library_import_invalid, result.invalid, result.invalid))
                         }
                     }
-                    is RecipeImportResult.Failed -> Text(stringResource(result.error.textRes))
+                    is RecipeImportResult.Failed -> Text(stringResource(ErrorMessages.recipeImport(result.error)))
                 }
             }
         },
@@ -95,13 +94,3 @@ internal fun ImportSummaryDialog(result: RecipeImportResult, onDismiss: () -> Un
         },
     )
 }
-
-@get:StringRes
-internal val RecipeImportError.textRes: Int
-    get() = when (this) {
-        RecipeImportError.TOO_LARGE -> R.string.recipe_import_error_too_large
-        RecipeImportError.NOT_AN_EXPORT -> R.string.recipe_import_error_not_an_export
-        RecipeImportError.NEWER_VERSION -> R.string.recipe_import_error_newer_version
-        RecipeImportError.UNREADABLE -> R.string.import_error_unreadable
-        RecipeImportError.SAVE_FAILED -> R.string.recipe_import_error_save_failed
-    }

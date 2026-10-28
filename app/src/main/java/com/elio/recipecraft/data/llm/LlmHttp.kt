@@ -2,6 +2,7 @@ package com.elio.recipecraft.data.llm
 
 import java.io.IOException
 import java.io.InterruptedIOException
+import java.time.Clock
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
@@ -34,6 +35,21 @@ internal fun errorKind(t: Throwable?, response: Response?): LlmErrorKind = when 
     response != null -> LlmErrorKind.MalformedResponse
     else -> LlmErrorKind.Network
 }
+
+/**
+ * How long a failed [response] asks the client to wait before trying again, from its
+ * `Retry-After` header: a number of seconds or an HTTP date, read against [clock]. Null when the
+ * header is missing or unreadable. Only the header is read, never the body.
+ */
+internal fun retryAfterMillis(response: Response?, clock: Clock): Long? {
+    if (response == null || response.isSuccessful) return null
+    val value = response.header(RETRY_AFTER)?.trim() ?: return null
+    value.toLongOrNull()?.let { seconds -> return if (seconds >= 0) seconds * 1000 else null }
+    val date = response.headers.getDate(RETRY_AFTER) ?: return null
+    return (date.time - clock.millis()).coerceAtLeast(0)
+}
+
+private const val RETRY_AFTER = "Retry-After"
 
 private fun statusErrorKind(code: Int): LlmErrorKind = when (code) {
     401, 403 -> LlmErrorKind.InvalidKey

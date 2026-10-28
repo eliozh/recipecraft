@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
 import com.elio.recipecraft.data.recipe.TranslationBatchState
 import com.elio.recipecraft.data.recipe.TranslationOffer
+import com.elio.recipecraft.ui.common.retryingText
 import com.elio.recipecraft.ui.common.translationErrorText
 import com.elio.recipecraft.ui.recipe.label
 
@@ -108,6 +109,9 @@ private fun ProgressDialog(batch: TranslationBatchState.Running, onCancel: () ->
                         stringResource(R.string.translate_progress, batch.current, batch.total),
                         modifier = Modifier.testTag(TranslationTestTags.PROGRESS_TEXT),
                     )
+                    batch.retryingInSeconds?.let { seconds ->
+                        Text(retryingText(seconds), modifier = Modifier.testTag(TranslationTestTags.RETRYING))
+                    }
                     LinearProgressIndicator(
                         progress = { (batch.current - 1).toFloat() / batch.total },
                         modifier = Modifier.fillMaxWidth(),
@@ -156,6 +160,7 @@ object TranslationTestTags {
     const val NOT_NOW = "translation_not_now"
     const val PROGRESS = "translation_progress"
     const val PROGRESS_TEXT = "translation_progress_text"
+    const val RETRYING = "translation_retrying"
     const val CANCEL = "translation_cancel"
     const val RESULT = "translation_result"
     const val RESULT_TEXT = "translation_result_text"

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.isImeVisible
@@ -37,6 +38,10 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -54,7 +60,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,6 +81,9 @@ import com.elio.recipecraft.ui.LocalAppLayout
 import com.elio.recipecraft.ui.common.isFixedInSettings
 import com.elio.recipecraft.ui.cover.CoverTopBar
 import com.elio.recipecraft.ui.common.llmErrorText
+import com.elio.recipecraft.ui.common.AppError
+import com.elio.recipecraft.ui.common.ErrorMessages
+import com.elio.recipecraft.ui.common.retryingText
 import com.elio.recipecraft.domain.GenerationScope
 import com.elio.recipecraft.domain.GenerationShortfall
 import com.elio.recipecraft.domain.Recipe
@@ -88,6 +100,23 @@ fun ChatScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val deletedMessage = stringResource(R.string.chat_deleted)
+    val undoLabel = stringResource(R.string.action_undo)
+    LaunchedEffect(state.pendingDelete) {
+        val pending = state.pendingDelete ?: return@LaunchedEffect
+        val result = snackbarHostState.showSnackbar(
+            deletedMessage,
+            actionLabel = undoLabel,
+            withDismissAction = true,
+            duration = SnackbarDuration.Long,
+        )
+        if (result == SnackbarResult.ActionPerformed) {
+            viewModel.onUndoDeleteConversation(pending)
+        } else {
+            viewModel.onDeleteConversationShown(pending)
+        }
+    }
     // A short window, such as a phone in landscape, folds the composer so the messages keep the room.
     val compactHeight = LocalAppLayout.current.compactHeight
     // The cover screen has room for the messages and one line of input; the composer opens full screen.
@@ -97,7 +126,7 @@ fun ChatScreen(
         if (compactHeight) viewModel.onComposerExpandedChanged(false)
     }
     val last = state.messages.lastOrNull()
-    LaunchedEffect(state.messages.size, last?.shownText?.length, last?.recipeStatus, last?.recipes?.size, state.error) {
+    LaunchedEffect(state.messages.size, last?.shownText?.length, last?.recipeStatus, last?.recipes?.size, state.error, state.retryingInSeconds) {
         val count = listState.layoutInfo.totalItemsCount
         if (count > 0) listState.scrollToItem(count - 1)
     }
@@ -150,6 +179,9 @@ fun ChatScreen(
                         ),
                     )
                 }
+                state.retryingInSeconds?.let { seconds ->
+                    item(key = "retrying") { Progress(retryingText(seconds), ChatTestTags.RETRYING) }
+                }
                 if (state.saveFailed) {
                     item(key = "save_failed") { SaveFailedCard(onDismiss = viewModel::onSaveFailedDismissed) }
                 }
@@ -159,27 +191,33 @@ fun ChatScreen(
             }
             // Above the list, so the chips get the taps.
             if (state.messages.isEmpty() && state.error == null) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .verticalScroll(rememberScrollState())
-                        .padding(if (cover) 16.dp else 32.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.chat_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    PresetChips(
-                        chips = PresetChip.forChat(empty = true),
-                        enabled = !state.sending,
-                        onAction = viewModel::onPreset,
-                        wrap = true,
-                    )
+                // Centred while it fits; with large text it scrolls from the top instead of being cut off.
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .heightIn(min = maxHeight)
+                            .fillMaxWidth()
+                            .padding(if (cover) 16.dp else 32.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.chat_empty),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        PresetChips(
+                            chips = PresetChip.forChat(empty = true),
+                            enabled = !state.sending,
+                            onAction = viewModel::onPreset,
+                            wrap = true,
+                        )
+                    }
                 }
             }
+            // The recent chats sheet shows the Undo snackbar itself while it is open.
+            if (!state.showRecent) SnackbarHost(snackbarHostState, Modifier.align(Alignment.BottomCenter))
         }
         if (state.sending) LinearProgressIndicator(Modifier.fillMaxWidth())
         if (!typingInShortWindow && !cover) {
@@ -202,6 +240,7 @@ fun ChatScreen(
                 instruction = modify.instruction,
                 running = modify.running,
                 error = modify.error,
+                retryingInSeconds = modify.retryingInSeconds,
                 onInstructionChanged = viewModel::onModifyInstructionChanged,
                 onSend = viewModel::onModifySend,
                 onCancel = viewModel::onModifyCancel,
@@ -218,11 +257,12 @@ fun ChatScreen(
         }
         if (state.showRecent) {
             RecentChatsSheet(
-                conversations = state.conversations,
+                conversations = state.visibleConversations,
                 openId = state.conversationId,
                 onOpen = viewModel::onOpenConversation,
                 onDelete = viewModel::onDeleteConversation,
                 onDismiss = viewModel::onHideRecent,
+                snackbarHostState = snackbarHostState,
             )
         }
         Composer(
@@ -376,7 +416,7 @@ private fun SaveFailedCard(onDismiss: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
         ) {
-            Text(stringResource(R.string.chat_save_failed), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text(stringResource(AppError.CHAT_SAVE_FAILED.message), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_dismiss)) }
         }
     }
@@ -387,12 +427,11 @@ private fun ShortfallWarning(shortfall: GenerationShortfall) {
     val separator = stringResource(R.string.list_separator)
     val lines = buildList {
         if (shortfall.isShort) {
-            val plural = if (shortfall.sets) R.plurals.generation_short_sets else R.plurals.generation_short_recipes
-            add(pluralStringResource(plural, shortfall.asked, shortfall.asked, shortfall.got))
+            add(pluralStringResource(ErrorMessages.shortfall(shortfall.sets), shortfall.asked, shortfall.asked, shortfall.got))
         }
         shortfall.incomplete.forEach { set ->
             val meals = set.missing.map { stringResource(it.label) }.joinToString(separator)
-            add(stringResource(R.string.generation_incomplete_set, set.day, meals))
+            add(stringResource(ErrorMessages.incompleteSet, set.day, meals))
         }
     }
     Card(
@@ -407,11 +446,12 @@ private fun ShortfallWarning(shortfall: GenerationShortfall) {
 }
 
 @Composable
-private fun Progress(text: String) {
+private fun Progress(text: String, tag: String = ChatTestTags.RECIPE_PROGRESS) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.padding(horizontal = 16.dp).testTag(ChatTestTags.RECIPE_PROGRESS),
+        // Read out when it appears or changes, since the user is not looking at it when it does.
+        modifier = Modifier.padding(horizontal = 16.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }.testTag(tag),
     ) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
         Text(text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -426,7 +466,7 @@ private fun RecipeFailed(canRetry: Boolean, onRetry: () -> Unit) {
         modifier = Modifier.fillMaxWidth().testTag(ChatTestTags.RECIPE_FAILED),
     ) {
         Text(
-            stringResource(R.string.chat_recipe_failed),
+            stringResource(AppError.CHAT_RECIPE_UNREADABLE.message),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
             modifier = Modifier.weight(1f),
@@ -447,13 +487,31 @@ private fun MessageBubble(message: ChatMessage, text: String, streaming: Boolean
                 .widthIn(max = 560.dp)
                 .testTag(if (isUser) ChatTestTags.USER_MESSAGE else ChatTestTags.ASSISTANT_MESSAGE),
         ) {
-            Text(
-                text = text.ifEmpty { if (streaming) "…" else "" },
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            )
+            if (text.isEmpty() && streaming) {
+                TypingIndicator()
+            } else {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                )
+            }
         }
     }
+}
+
+/** Shown in a reply bubble until its first text arrives. */
+@Composable
+private fun TypingIndicator() {
+    val description = stringResource(R.string.chat_typing)
+    CircularProgressIndicator(
+        strokeWidth = 2.dp,
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .size(20.dp)
+            .semantics { contentDescription = description }
+            .testTag(ChatTestTags.TYPING),
+    )
 }
 
 @Composable
@@ -539,4 +597,6 @@ object ChatTestTags {
     const val RECENT = "chat_recent"
     const val NEW_CHAT = "chat_new"
     const val OPEN_COMPOSER = "chat_open_composer"
+    const val TYPING = "chat_typing"
+    const val RETRYING = "chat_retrying"
 }

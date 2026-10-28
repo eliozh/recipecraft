@@ -24,8 +24,11 @@ import kotlinx.coroutines.launch
 sealed interface TranslationBatchState {
     data object Idle : TranslationBatchState
 
-    /** Translating recipe [current] (1-based) of [total]; [current] is 0 while the batch starts. */
-    data class Running(val current: Int, val total: Int) : TranslationBatchState
+    /**
+     * Translating recipe [current] (1-based) of [total]; [current] is 0 while the batch starts.
+     * [retryingInSeconds] is set while a rate-limited request waits to be sent again.
+     */
+    data class Running(val current: Int, val total: Int, val retryingInSeconds: Int? = null) : TranslationBatchState
 
     /**
      * [translated] recipes were translated and saved; [failed] were left as they were, with [error]
@@ -76,14 +79,17 @@ class RecipeTranslations @Inject constructor(
         if (_batch.value is TranslationBatchState.Finished) _batch.value = TranslationBatchState.Idle
     }
 
-    /** Translates [recipe] into [target] and saves it; returns why it failed, or null. */
-    suspend fun translate(recipe: Recipe, target: Language): TranslationError? {
+    /**
+     * Translates [recipe] into [target] and saves it; returns why it failed, or null. [onRetryWait]
+     * gets the seconds a rate-limit wait lasts, then null once the model answers.
+     */
+    suspend fun translate(recipe: Recipe, target: Language, onRetryWait: (Int?) -> Unit = {}): TranslationError? {
         if (recipe.language == target) return null
         val client = when (val result = clientFactory.forActiveProvider()) {
             is LlmClientResult.Ready -> result.client
             is LlmClientResult.Unavailable -> return TranslationError.Llm(result.kind)
         }
-        return translateAndSave(recipe, target, client)
+        return translateAndSave(recipe, target, client, onRetryWait)
     }
 
     private suspend fun runBatch(target: Language) {
@@ -108,8 +114,11 @@ class RecipeTranslations @Inject constructor(
                 }
             }
             for ((index, recipe) in recipes.withIndex()) {
-                _batch.value = TranslationBatchState.Running(index + 1, recipes.size)
-                val failure = translateAndSave(recipe, target, client)
+                val running = TranslationBatchState.Running(index + 1, recipes.size)
+                _batch.value = running
+                val failure = translateAndSave(recipe, target, client) { seconds ->
+                    _batch.value = running.copy(retryingInSeconds = seconds)
+                }
                 if (failure == null) {
                     translated++
                     continue
@@ -129,8 +138,13 @@ class RecipeTranslations @Inject constructor(
         }
     }
 
-    private suspend fun translateAndSave(recipe: Recipe, target: Language, client: LlmClient): TranslationError? =
-        when (val result = translator.translate(recipe, target, client)) {
+    private suspend fun translateAndSave(
+        recipe: Recipe,
+        target: Language,
+        client: LlmClient,
+        onRetryWait: (Int?) -> Unit,
+    ): TranslationError? =
+        when (val result = translator.translate(recipe, target, client, onRetryWait)) {
             is TranslationResult.Failure -> result.error
             is TranslationResult.Success -> try {
                 // A recipe deleted while it was being translated stays deleted.

@@ -7,7 +7,7 @@
     <string name="library_empty">No saved recipes yet. Generate some in Chat and tap Save.</string>
     <string name="library_open_chat">Go to Chat</string>
     <string name="library_no_match">No saved recipes match.</string>
-    <string name="library_load_failed">Couldn\'t load your recipes.</string>
+    <string name="library_load_failed">Couldn\'t load your recipes. Restart the app to try again.</string>
     <string name="library_search_hint">Search recipes or ingredients</string>
     <string name="library_filter_all">All</string>
     <string name="library_select_recipe">Pick a recipe to see it here.</string>
@@ -42,36 +42,43 @@
     <string name="api_key_hide">Hide</string>
     <string name="api_key_clear">Clear key</string>
     <string name="settings_save_failed">Couldn\'t save. Try again.</string>
-    <string name="settings_load_failed">Couldn\'t load these settings. Try again.</string>
+    <string name="settings_load_failed">Couldn\'t load these settings. Tap Retry.</string>
     <string name="chat_empty">Ask for a recipe, or anything about cooking.</string>
     <string name="chat_input_hint">Message</string>
     <string name="chat_send">Send</string>
     <string name="chat_stop">Stop</string>
+    <string name="chat_typing">The AI is writing a reply</string>
     <string name="chat_open_settings">Open Settings</string>
-    <string name="error_invalid_key">Invalid API key. Check it in Settings.</string>
-    <string name="error_rate_limited">Rate limited, try again shortly.</string>
-    <string name="error_network">Network error. Check your connection and try again.</string>
-    <string name="error_timeout">Timed out. Try again.</string>
-    <string name="error_server">The provider returned an error (HTTP %1$d).</string>
-    <string name="error_malformed_response">The provider sent a reply the app couldn\'t read.</string>
-    <string name="error_missing_key">No API key set. Add one in Settings.</string>
-    <string name="error_missing_model">Pick a model in Settings first.</string>
-    <string name="error_invalid_endpoint">The provider\'s base URL is missing or invalid. Fix it in Settings.</string>
+    <string name="error_invalid_key">The provider rejected your API key. Check it in Settings.</string>
+    <string name="error_invalid_key_settings">The provider rejected this API key. Check that it is correct and still active.</string>
+    <string name="error_rate_limited">The provider is limiting requests right now. Wait a minute, then try again.</string>
+    <string name="error_rate_limited_retrying">Rate limited — retrying in %1$ds…</string>
+    <string name="error_network">Couldn\'t reach the provider. Check your connection and try again.</string>
+    <string name="error_timeout">The provider took too long to answer. Try again.</string>
+    <string name="error_server">The provider had a problem (HTTP %1$d). Try again in a few minutes.</string>
+    <string name="error_malformed_response">The provider sent a reply the app couldn\'t read. Try again, or try another model.</string>
+    <string name="error_missing_key">No API key is set. Add one in Settings.</string>
+    <string name="error_missing_key_settings">Enter an API key above first.</string>
+    <string name="error_missing_model">No model is selected. Pick one in Settings.</string>
+    <string name="error_missing_model_settings">Enter a model above, or tap Fetch models to pick one.</string>
+    <string name="error_invalid_endpoint">The base URL is missing or invalid. Fix it in Settings.</string>
+    <string name="error_invalid_endpoint_settings">Fix the base URL above, then try again.</string>
     <string name="error_keystore_unavailable">The device\'s secure key store is unavailable, so your API key can\'t be read. Restart the device or enter the key again in Settings.</string>
-    <string name="error_settings_unavailable">Couldn\'t read your settings. Try again.</string>
+    <string name="error_keystore_unavailable_settings">The device\'s secure key store is unavailable, so your API key can\'t be read. Restart the device, or enter the key again above.</string>
+    <string name="error_settings_unavailable">Couldn\'t read your settings. Try again; if it keeps failing, restart the app.</string>
     <string name="settings_test_connection">Test connection</string>
     <string name="settings_connection_testing">Testing connection…</string>
     <string name="settings_connection_ok">Connected successfully.</string>
-    <string name="settings_connection_failed">Connection failed: %1$s</string>
+    <string name="settings_connection_failed">Connection failed. %1$s</string>
     <string name="settings_fetch_models">Fetch models</string>
     <string name="settings_models_loading">Loading models…</string>
-    <string name="settings_models_failed">Couldn\'t fetch models: %1$s</string>
-    <string name="settings_models_empty">The provider returned no models.</string>
+    <string name="settings_models_failed">Couldn\'t fetch models. %1$s</string>
+    <string name="settings_models_empty">The provider returned no models. Type the model name instead.</string>
     <string name="settings_pick_model">Pick a model</string>
     <string name="action_cancel">Cancel</string>
     <string name="chat_building_recipes">Building recipes…</string>
     <string name="chat_repairing_recipes">Fixing the recipe format…</string>
-    <string name="chat_recipe_failed">Couldn\'t read a recipe from this reply.</string>
+    <string name="chat_recipe_failed">Couldn\'t read a recipe from this reply. Tap Retry to ask again.</string>
     <string name="action_retry">Retry</string>
     <string name="recipe_ingredients">Ingredients</string>
     <string name="recipe_tools">Tools</string>
@@ -137,15 +144,15 @@
     <string name="row_error_kcal_too_high">kcal_per_100g is over 1000</string>
     <string name="row_error_duplicate_name">repeats an earlier name</string>
     <string name="row_error_bad_quotes">has unmatched quotes</string>
-    <string name="import_error_empty">The file is empty.</string>
+    <string name="import_error_empty">The file is empty. Pick the CSV file that holds your table.</string>
     <string name="import_error_wrong_header">The first row must be exactly: name,aliases,kcal_per_100g</string>
-    <string name="import_error_too_large">The file is larger than 5 MB.</string>
+    <string name="import_error_too_large">The file is larger than 5 MB. Split it into smaller tables and import each one.</string>
     <string name="import_error_not_utf8">The file isn\'t UTF-8 text. Save it as “CSV UTF-8” and try again.</string>
-    <string name="import_error_no_valid_rows">No row was valid, so nothing was imported.</string>
-    <string name="import_error_unreadable">Couldn\'t read the file.</string>
+    <string name="import_error_no_valid_rows">No row was valid, so nothing was imported. Check the rows against the format above.</string>
+    <string name="import_error_unreadable">Couldn\'t read the file. Check that it still exists, then try again.</string>
     <string name="import_error_save_failed">Couldn\'t save the table. Try again.</string>
     <string name="nutrition_tables_action_failed">Couldn\'t update your tables. Try again.</string>
-    <string name="nutrition_tables_load_failed">Couldn\'t load your tables.</string>
+    <string name="nutrition_tables_load_failed">Couldn\'t load your tables. Restart the app to try again.</string>
     <string name="action_import">Import</string>
     <string name="action_delete">Delete</string>
     <string name="action_dismiss">Dismiss</string>
@@ -174,24 +181,24 @@
     <string name="generation_summary_preferences">%1$s · %2$s</string>
     <string name="generation_day">Day %1$d</string>
     <plurals name="generation_short_sets">
-        <item quantity="one">Asked for %1$d full-day set, got %2$d.</item>
-        <item quantity="other">Asked for %1$d full-day sets, got %2$d.</item>
+        <item quantity="one">Asked for %1$d full-day set, got %2$d. Ask again for the rest.</item>
+        <item quantity="other">Asked for %1$d full-day sets, got %2$d. Ask again for the rest.</item>
     </plurals>
     <plurals name="generation_short_recipes">
-        <item quantity="one">Asked for %1$d recipe, got %2$d.</item>
-        <item quantity="other">Asked for %1$d recipes, got %2$d.</item>
+        <item quantity="one">Asked for %1$d recipe, got %2$d. Ask again for the rest.</item>
+        <item quantity="other">Asked for %1$d recipes, got %2$d. Ask again for the rest.</item>
     </plurals>
     <!-- day number, missing meals joined with list_separator -->
-    <string name="generation_incomplete_set">Day %1$d is missing %2$s.</string>
+    <string name="generation_incomplete_set">Day %1$d is missing %2$s. Ask again to fill it in.</string>
     <string name="list_separator">", "</string>
     <string name="action_back">Back</string>
     <string name="action_undo">Undo</string>
     <string name="recipe_delete">Delete recipe</string>
     <string name="recipe_deleted">Recipe deleted</string>
     <string name="recipe_delete_failed">Couldn\'t delete the recipe. Try again.</string>
-    <string name="recipe_restore_failed">Couldn\'t restore the recipe.</string>
+    <string name="recipe_restore_failed">Couldn\'t restore the recipe. If you exported your library, import the recipe from that file.</string>
     <string name="recipe_not_found">This recipe is no longer in your library.</string>
-    <string name="recipe_load_failed">Couldn\'t load this recipe.</string>
+    <string name="recipe_load_failed">Couldn\'t load this recipe. Go back and open it again.</string>
     <!-- a date -->
     <string name="recipe_created">Created %1$s</string>
     <!-- a date -->
@@ -233,8 +240,8 @@
     </plurals>
     <string name="translate_cancelled_rest">The other recipes were left as they were.</string>
     <string name="translate_none">There were no recipes to translate.</string>
-    <string name="translate_error_rejected">The AI\'s translation changed more than the text, so it wasn\'t used.</string>
-    <string name="translate_error_storage">Couldn\'t read or save your recipes.</string>
+    <string name="translate_error_rejected">The AI\'s translation changed more than the text, so it wasn\'t used. Try again.</string>
+    <string name="translate_error_storage">Couldn\'t read or save your recipes. Try again; if it keeps failing, restart the app.</string>
     <string name="recipe_translating">Translating…</string>
     <string name="recipe_modify">Modify with AI</string>
     <string name="recipe_modified">Modified</string>
@@ -251,7 +258,7 @@
     <string name="modify_chip_swap_text">Swap one ingredient for another</string>
     <!-- Joins a quick chip's text to what is already typed -->
     <string name="modify_instruction_separator">"; "</string>
-    <string name="modify_error_rejected">The AI\'s reply wasn\'t a usable recipe, so nothing changed.</string>
+    <string name="modify_error_rejected">The AI\'s reply wasn\'t a usable recipe, so nothing changed. Try again, or word the change differently.</string>
     <string name="action_open">Open</string>
     <string name="action_replace">Replace</string>
     <string name="action_save_as_copy">Save as copy</string>
@@ -273,6 +280,7 @@
     <string name="chat_recent">Recent chats</string>
     <string name="chat_recent_empty">No chats yet.</string>
     <string name="chat_delete_conversation">Delete chat</string>
+    <string name="chat_deleted">Chat deleted</string>
     <!-- Preset chips: the label, then what it sends or puts in the input, in this language -->
     <string name="preset_full_day">Full day plan</string>
     <string name="preset_quick_breakfasts">3 quick breakfasts</string>
@@ -306,8 +314,8 @@
         <item quantity="one">%1$d recipe was skipped because it is incomplete or unreadable.</item>
         <item quantity="other">%1$d recipes were skipped because they are incomplete or unreadable.</item>
     </plurals>
-    <string name="recipe_import_error_too_large">The file is larger than 20 MB.</string>
-    <string name="recipe_import_error_not_an_export">This isn\'t a RecipeCraft export file.</string>
+    <string name="recipe_import_error_too_large">The file is larger than 20 MB. Pick a file made with Export all.</string>
+    <string name="recipe_import_error_not_an_export">This isn\'t a RecipeCraft export file. Pick a file made with Export all.</string>
     <string name="recipe_import_error_newer_version">This file was exported by a newer version of RecipeCraft. Update the app to import it.</string>
     <string name="recipe_import_error_save_failed">Couldn\'t save the recipes. Try again.</string>
     <string name="recipe_share">Share</string>

@@ -185,6 +185,91 @@ class SettingsViewModelTest {
     }
 
     @Test
+    fun `after a failed load, edits are ignored so the shown defaults never overwrite what is stored`() = runTest {
+        val repo = repository()
+        val stored = ProviderConfig(ProviderType.CUSTOM, "https://llm.example.com/v1", Protocol.OPENAI_COMPATIBLE, "m")
+        repo.updateProviderConfig(stored)
+        repo.setActiveProvider(ProviderType.CUSTOM)
+        secrets.keys[ProviderType.CUSTOM] = PLACEHOLDER
+        secrets.failReads = true
+        val vm = viewModel(repo)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.loadFailed)
+        assertFalse(vm.uiState.value.editable)
+
+        vm.onModelChanged("other")
+        vm.onBaseUrlChanged("")
+        vm.onProtocolSelected(Protocol.ANTHROPIC)
+        vm.onApiKeyChanged("")
+        advanceUntilIdle()
+        assertEquals(stored, repo.providerConfig(ProviderType.CUSTOM).first())
+        assertEquals(PLACEHOLDER, secrets.keys[ProviderType.CUSTOM])
+
+        secrets.failReads = false
+        vm.onRetryLoad()
+        advanceUntilIdle()
+        val state = vm.uiState.value
+        assertTrue(state.editable)
+        assertEquals(stored, state.config)
+        assertEquals(PLACEHOLDER, state.apiKey.plaintext)
+    }
+
+    @Test
+    fun `a failed key save stays reported until the key saves, whatever else saves meanwhile`() = runTest {
+        val repo = repository()
+        val vm = viewModel(repo)
+        advanceUntilIdle()
+
+        secrets.failWrites = true
+        vm.onApiKeyChanged(PLACEHOLDER)
+        advanceUntilIdle()
+        assertEquals(setOf(SettingsField.API_KEY), vm.uiState.value.failedSaves)
+
+        vm.onModelChanged("claude-test")
+        advanceUntilIdle()
+        assertEquals("claude-test", repo.providerConfig(ProviderType.CLAUDE).first().model)
+        assertEquals(setOf(SettingsField.API_KEY), vm.uiState.value.failedSaves)
+        assertTrue(vm.uiState.value.saveFailed)
+
+        secrets.failWrites = false
+        vm.onApiKeyChanged(PLACEHOLDER)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.failedSaves.isEmpty())
+    }
+
+    @Test
+    fun `a failed key save is dropped once another provider loads`() = runTest {
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        secrets.failWrites = true
+        vm.onApiKeyChanged(PLACEHOLDER)
+        advanceUntilIdle()
+        assertTrue(vm.uiState.value.saveFailed)
+
+        vm.onProviderSelected(ProviderType.OPENAI)
+        advanceUntilIdle()
+        assertFalse(vm.uiState.value.saveFailed)
+    }
+
+    @Test
+    fun `retry does nothing unless a load failed`() = runTest {
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onRetryLoad()
+        assertFalse(vm.uiState.value.loading)
+    }
+
+    @Test
+    fun `test connection reports a rate limit at once instead of waiting to retry`() = runTest {
+        val vm = viewModel(repository())
+        advanceUntilIdle()
+        vm.onTestConnection()
+        client.events.send(LlmEvent.Retrying(1, 2_000))
+        advanceUntilIdle()
+        assertEquals(ConnectionTestState.Failed(LlmErrorKind.RateLimited), vm.uiState.value.connectionTest)
+    }
+
+    @Test
     fun `language follows changes made outside the app`() = runTest {
         val vm = viewModel(repository())
         advanceUntilIdle()

@@ -4,7 +4,25 @@ package com.elio.recipecraft.data.llm
 sealed interface LlmEvent {
     data class Delta(val text: String) : LlmEvent
     data class Done(val usage: Usage?) : LlmEvent
-    data class Error(val kind: LlmErrorKind) : LlmEvent
+    /**
+     * The request failed. [retryAfterMillis] is how long the provider asked the client to wait,
+     * from a `Retry-After` header, when it sent one.
+     */
+    data class Error(val kind: LlmErrorKind, val retryAfterMillis: Long? = null) : LlmEvent
+
+    /**
+     * The provider rate-limited the request before any reply text arrived, and it is sent again
+     * after [delayMillis]; [attempt] is the attempt that failed, from 1. Only [RetryingLlmClient]
+     * emits it, and only before any [Delta].
+     */
+    data class Retrying(val attempt: Int, val delayMillis: Long) : LlmEvent {
+        /** The wait in whole seconds, rounded up, as the screen shows it. */
+        val delaySeconds: Int get() = ((delayMillis + MILLIS_PER_SECOND - 1) / MILLIS_PER_SECOND).toInt()
+
+        private companion object {
+            const val MILLIS_PER_SECOND = 1000L
+        }
+    }
 }
 
 /** Token counts, when the provider reports them. */

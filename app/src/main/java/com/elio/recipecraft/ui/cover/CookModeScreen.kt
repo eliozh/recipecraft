@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.elio.recipecraft.R
+import com.elio.recipecraft.ui.common.AppError
 import com.elio.recipecraft.domain.Step
 import com.elio.recipecraft.ui.LocalAppLayout
 import kotlinx.coroutines.delay
@@ -102,7 +103,7 @@ fun CookModeContent(
             state.loading -> CookTopBar(title = "", onClose = onClose)
             state.recipe == null -> {
                 CookTopBar(title = "", onClose = onClose)
-                Message(stringResource(if (state.loadFailed) R.string.recipe_load_failed else R.string.recipe_not_found))
+                Message(stringResource(if (state.loadFailed) AppError.RECIPE_LOAD_FAILED.message else AppError.RECIPE_NOT_FOUND.message))
             }
             steps.isEmpty() -> {
                 CookTopBar(title = state.recipe.name, onClose = onClose)

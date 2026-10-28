@@ -67,6 +67,8 @@ import com.elio.recipecraft.ui.cover.CoverSectionHeader
 import com.elio.recipecraft.ui.cover.CoverTopBar
 import com.elio.recipecraft.ui.cover.CoverTouchTarget
 import com.elio.recipecraft.ui.chat.ModifySheet
+import com.elio.recipecraft.ui.common.AppError
+import com.elio.recipecraft.ui.common.retryingText
 import com.elio.recipecraft.ui.common.translationErrorText
 import java.text.DateFormat
 import java.text.NumberFormat
@@ -117,18 +119,19 @@ fun RecipeDetailScreen(
             }
         }
     }
-    val modifySaveFailedMessage = stringResource(R.string.recipe_modify_save_failed)
+    // Each flag is cleared only once its snackbar is gone: clearing first would change the key and cancel it.
+    val modifySaveFailedMessage = stringResource(AppError.MODIFY_SAVE_FAILED.message)
     LaunchedEffect(state.modifySaveFailed) {
         if (state.modifySaveFailed) {
-            viewModel.onModifySaveFailedShown()
             snackbarHostState.showSnackbar(modifySaveFailedMessage)
+            viewModel.onModifySaveFailedShown()
         }
     }
-    val deleteFailedMessage = stringResource(R.string.recipe_delete_failed)
+    val deleteFailedMessage = stringResource(AppError.RECIPE_DELETE_FAILED.message)
     LaunchedEffect(state.deleteFailed) {
         if (state.deleteFailed) {
-            viewModel.onDeleteFailedShown()
             snackbarHostState.showSnackbar(deleteFailedMessage)
+            viewModel.onDeleteFailedShown()
         }
     }
 
@@ -136,11 +139,16 @@ fun RecipeDetailScreen(
         viewModel.onResume()
         onPauseOrDispose {}
     }
+    val translateRetryMessage = state.translateRetryingInSeconds?.let { retryingText(it) }
+    LaunchedEffect(translateRetryMessage) {
+        // Short, like the wait; a new wait replaces it, and the answer or the error ends it.
+        if (translateRetryMessage != null) snackbarHostState.showSnackbar(translateRetryMessage)
+    }
     val translateErrorMessage = state.translateError?.let { translationErrorText(it) }
     LaunchedEffect(translateErrorMessage) {
         if (translateErrorMessage != null) {
-            viewModel.onTranslateErrorShown()
             snackbarHostState.showSnackbar(translateErrorMessage)
+            viewModel.onTranslateErrorShown()
         }
     }
 
@@ -155,7 +163,8 @@ fun RecipeDetailScreen(
             }
             val actions = @Composable {
                 if (state.translating) {
-                    val translating = stringResource(R.string.recipe_translating)
+                    val translating = state.translateRetryingInSeconds?.let { retryingText(it) }
+                        ?: stringResource(R.string.recipe_translating)
                     CircularProgressIndicator(
                         strokeWidth = 2.dp,
                         modifier = Modifier
@@ -212,8 +221,8 @@ fun RecipeDetailScreen(
                 onCook = onCook?.let { { it(recipe.id) } },
                 modifier = Modifier.padding(padding),
             )
-            state.loadFailed -> Message(stringResource(R.string.recipe_load_failed), RecipeDetailTestTags.LOAD_FAILED, padding)
-            else -> Message(stringResource(R.string.recipe_not_found), RecipeDetailTestTags.NOT_FOUND, padding)
+            state.loadFailed -> Message(stringResource(AppError.RECIPE_LOAD_FAILED.message), RecipeDetailTestTags.LOAD_FAILED, padding)
+            else -> Message(stringResource(AppError.RECIPE_NOT_FOUND.message), RecipeDetailTestTags.NOT_FOUND, padding)
         }
     }
 
@@ -234,6 +243,7 @@ fun RecipeDetailScreen(
             instruction = modify.instruction,
             running = modify.running,
             error = modify.error,
+            retryingInSeconds = modify.retryingInSeconds,
             onInstructionChanged = viewModel::onModifyInstructionChanged,
             onSend = viewModel::sendModify,
             onCancel = viewModel::cancelModify,

@@ -7,7 +7,13 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertContentDescriptionEquals
+import com.elio.recipecraft.ui.assertTouchHeightIsAtLeast
+import com.elio.recipecraft.ui.assertTouchWidthIsAtLeast
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isHeading
+import androidx.compose.ui.test.junit4.accessibility.enableAccessibilityChecks
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -219,7 +225,7 @@ class ChatScreenTest {
         client.events.trySend(LlmEvent.Done(null))
         compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecipeCardTestTags.CARD).fetchSemanticsNodes().size == 3 }
         compose.onNodeWithTag(ChatTestTags.GENERATION_WARNING).assertExists()
-        compose.onNodeWithText("Asked for 4 recipes, got 3.").assertExists()
+        compose.onNodeWithText(context.resources.getQuantityString(R.plurals.generation_short_recipes, 4, 4, 3)).assertExists()
         compose.onAllNodesWithTag(ChatTestTags.DAY_HEADER).assertCountEquals(0)
     }
 
@@ -350,6 +356,69 @@ class ChatScreenTest {
 
         waitForText("First answer")
         compose.onNodeWithTag(RecentChatsTestTags.SHEET).assertDoesNotExist()
+    }
+
+    @Test
+    fun theChatPassesAccessibilityChecksAndLabelsItsIconButtons() {
+        compose.enableAccessibilityChecks()
+        setContent()
+        compose.onNodeWithTag(ChatTestTags.RECENT)
+            .assertContentDescriptionEquals(context.getString(R.string.chat_recent))
+            .assertTouchHeightIsAtLeast(48.dp)
+            .assertTouchWidthIsAtLeast(48.dp)
+        compose.onNodeWithTag(ChatTestTags.NEW_CHAT)
+            .assertContentDescriptionEquals(context.getString(R.string.chat_new))
+            .assertTouchHeightIsAtLeast(48.dp)
+        compose.onNodeWithText(context.getString(R.string.chat_send)).assertTouchHeightIsAtLeast(48.dp)
+
+        send("Hi")
+        // Before the first text arrives the reply shows a labelled typing indicator, not a bare "…".
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(ChatTestTags.TYPING).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag(ChatTestTags.TYPING).assertContentDescriptionEquals(context.getString(R.string.chat_typing))
+        compose.onAllNodes(hasText("…")).assertCountEquals(0)
+        client.events.trySend(LlmEvent.Delta("Hello there"))
+        client.events.trySend(LlmEvent.Done(null))
+        waitForText("Hello there")
+        compose.onNodeWithTag(ChatTestTags.TYPING).assertDoesNotExist()
+        compose.onNodeWithTag(ChatTestTags.RECENT).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecentChatsTestTags.DELETE).fetchSemanticsNodes().size == 1 }
+        compose.onNodeWithTag(RecentChatsTestTags.DELETE)
+            .assertContentDescriptionEquals(context.getString(R.string.chat_delete_conversation))
+            .assertTouchHeightIsAtLeast(48.dp)
+        compose.onNode(hasText(context.getString(R.string.chat_recent)) and isHeading()).assertExists()
+    }
+
+    @Test
+    fun aRateLimitWaitIsShownUntilTheReplyStarts() {
+        setContent()
+        send("Hi")
+        client.events.trySend(LlmEvent.Retrying(1, 3_000))
+        waitForText(context.getString(R.string.error_rate_limited_retrying, 3))
+
+        client.events.trySend(LlmEvent.Delta("Hello"))
+        waitForText("Hello")
+        compose.onNodeWithTag(ChatTestTags.RETRYING).assertDoesNotExist()
+    }
+
+    @Test
+    fun deletingARecentChatOffersUndoThatPutsItBack() {
+        setContent()
+        send("Keep me")
+        client.events.trySend(LlmEvent.Delta("Kept answer"))
+        client.events.trySend(LlmEvent.Done(null))
+        waitForText("Kept answer")
+
+        compose.onNodeWithTag(ChatTestTags.RECENT).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecentChatsTestTags.ITEM).fetchSemanticsNodes().size == 1 }
+        compose.onNodeWithTag(RecentChatsTestTags.DELETE).performClick()
+        waitForText(context.getString(R.string.chat_deleted))
+        compose.onAllNodesWithTag(RecentChatsTestTags.ITEM).assertCountEquals(0)
+        compose.onNodeWithText("Kept answer").assertDoesNotExist()
+
+        compose.onNodeWithText(context.getString(R.string.action_undo)).performClick()
+        waitForText("Kept answer")
+        compose.onNodeWithTag(ChatTestTags.RECENT).performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag(RecentChatsTestTags.ITEM).fetchSemanticsNodes().size == 1 }
     }
 
     private fun fixture(name: String) =
