@@ -8,6 +8,7 @@ captures/
 
 # Local configuration
 local.properties
+gradle/gradle-daemon-jvm.properties
 
 # IDE
 .idea/
