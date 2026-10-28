@@ -74,6 +74,8 @@ export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9
 ./gradlew connectedDebugAndroidTest   # needs the Pixel_10_Pro_API37 AVD running
 ```
 
+`.github/workflows/ci.yml` runs the pre-commit gate on every push to `main` and every pull request, and uploads `app/build/reports/` when it fails. Instrumented tests run only locally. If you change the gate, update the workflow too. `.github/dependabot.yml` opens weekly grouped update PRs for Gradle dependencies and GitHub Actions.
+
 ## Releases
 
 `.github/workflows/release.yml` runs when a `vX.Y.Z` tag is pushed to GitHub. It runs `test lint koverVerify`, builds a signed `assembleRelease` and publishes a GitHub Release with one APK per ABI (`RecipeCraft-vX.Y.Z-<abi>.apk` for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, plus `universal`) and `SHA256SUMS.txt` attached. The ABI list is in the `splits` block of `app/build.gradle.kts`. If you change it, update the loop in the workflow too. Nothing runs for a tag that exists only locally.
