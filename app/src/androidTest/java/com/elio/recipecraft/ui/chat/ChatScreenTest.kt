@@ -1,5 +1,6 @@
 package com.elio.recipecraft.ui.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.assertTextContains
@@ -96,6 +97,7 @@ class ChatScreenTest {
             recipes = RecipeRepository(database.recipes(), nutrition, Dispatchers.IO),
             recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, Clock.systemUTC()),
             chats = ChatRepository(database.chats(), Clock.systemUTC(), Dispatchers.IO),
+            savedState = SavedStateHandle(),
         )
         compose.setContent {
             RecipeCraftTheme {

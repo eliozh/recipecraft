@@ -1,5 +1,6 @@
 package com.elio.recipecraft.ui.chat
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.elio.recipecraft.data.chat.ChatMessage
@@ -35,10 +36,13 @@ import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -136,9 +140,16 @@ class ChatViewModel @Inject constructor(
     private val recipes: RecipeRepository,
     private val recipeModifier: RecipeModifier,
     private val chats: ChatRepository,
+    /** Keeps the half-typed input and the composer through the app process being stopped. */
+    private val savedState: SavedStateHandle,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ChatUiState())
+    /** True when the input and composer came back from before the process was stopped. */
+    private val restoredDraft = savedState.contains(KEY_INPUT)
+
+    private val _uiState = MutableStateFlow(
+        ChatUiState(input = savedState[KEY_INPUT] ?: "", composer = restoredComposer() ?: ComposerState()),
+    )
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     private var nextId = 0L
@@ -161,6 +172,15 @@ class ChatViewModel @Inject constructor(
     /** True while a write of the streaming reply is queued; it writes whatever text has arrived when it runs. */
     private var partialWriteQueued = false
 
+    /** The text of the streaming reply, which reaches [uiState] at most every [STREAM_UPDATE_MILLIS]. */
+    private var replyBuffer: ReplyBuffer? = null
+
+    /** Shows the streaming reply's latest text at the end of each interval; null while no text is waiting. */
+    private var updateJob: Job? = null
+
+    /** The streaming reply has text that [uiState] does not show yet. */
+    private var replyDirty = false
+
     init {
         viewModelScope.launch {
             for (write in writes) {
@@ -173,8 +193,12 @@ class ChatViewModel @Inject constructor(
                 }
             }
         }
+        viewModelScope.launch {
+            _uiState.map { it.input to it.composer }.distinctUntilChanged().collect { (input, composer) -> saveDraft(input, composer) }
+        }
         val first = session
-        enqueue { chats.lastOpened()?.let { load(first, it) } }
+        // A restored composer stays as the user left it; otherwise it folds away over a reopened chat.
+        enqueue { chats.lastOpened()?.let { load(first, it, keepComposer = restoredDraft) } }
         viewModelScope.launch {
             recipes.savedIds
                 // Room reports an unreadable database as a runtime exception; cards then offer Save, which reports the failure.
@@ -303,7 +327,10 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    /** Asks again for the reply [messageId], replacing it; the user turn before it is resent. */
+    /**
+     * Asks again for the reply [messageId], replacing it where it is; the user turn before it is
+     * resent with only the turns before that as history.
+     */
     fun onRetry(messageId: Long) {
         val messages = _uiState.value.messages
         val index = messages.indexOfFirst { it.id == messageId }
@@ -314,17 +341,17 @@ class ChatViewModel @Inject constructor(
             val history = messages.subList(0, userIndex).toHistory()
             val prompt = user.generation?.let { promptBuilder.generate(history, it) }
                 ?: promptBuilder.chat(history, user.text)
-            val replyId = nextId++
+            // The new reply takes the old one's place, in the chat and in storage.
             _uiState.update {
                 it.copy(
-                    messages = it.messages.filterNot { m -> m.id == messageId } +
-                        ChatMessage(replyId, LlmMessage.Role.ASSISTANT, "", replyState = ReplyState.STREAMING),
-                    streamingMessageId = replyId,
+                    messages = it.messages.map { m ->
+                        if (m.id == messageId) ChatMessage(messageId, LlmMessage.Role.ASSISTANT, "", replyState = ReplyState.STREAMING) else m
+                    },
+                    streamingMessageId = messageId,
                 )
             }
-            val retried = session
-            enqueue { retried.conversationId?.let { chats.deleteMessage(it, messageId) } }
-            reply(client, prompt, replyId, user.generation)
+            persist(messageId)
+            reply(client, prompt, messageId, user.generation)
         }
     }
 
@@ -430,6 +457,7 @@ class ChatViewModel @Inject constructor(
     fun onStop() {
         replyJob?.cancel()
         replyJob = null
+        endStream()
         finishReply(stopped = true)
     }
 
@@ -464,9 +492,32 @@ class ChatViewModel @Inject constructor(
         _uiState.update { it.copy(composer = transform(it.composer)) }
     }
 
+    private fun saveDraft(input: String, composer: ComposerState) {
+        savedState[KEY_INPUT] = input
+        savedState[KEY_SCOPE] = composer.scope.name
+        savedState[KEY_COUNT] = composer.count
+        savedState[KEY_PREFERENCES] = composer.preferences
+        savedState[KEY_EXPANDED] = composer.expanded
+    }
+
+    /** The composer as it was saved before the process was stopped, or null when nothing was saved. */
+    private fun restoredComposer(): ComposerState? {
+        val scope = savedState.get<String>(KEY_SCOPE)?.let { name -> GenerationScope.entries.firstOrNull { it.name == name } }
+            ?: return null
+        val defaults = ComposerState()
+        return ComposerState(
+            scope = scope,
+            count = (savedState.get<Int>(KEY_COUNT) ?: defaults.count).coerceIn(GenerationRequest.COUNT_RANGE),
+            preferences = savedState[KEY_PREFERENCES] ?: defaults.preferences,
+            expanded = savedState[KEY_EXPANDED] ?: defaults.expanded,
+        )
+    }
+
     /** Streams the reply to [prompt]; [request] is the composer request it answers, null for free-form chat. */
     private suspend fun reply(client: LlmClient, prompt: Prompt, replyId: Long, request: GenerationRequest?) {
+        replyBuffer = ReplyBuffer(replyId)
         val error = client.collectReply(prompt.request, ::onRetryWait) { delta -> appendDelta(replyId, delta) }
+        endStream()
         if (error != null) {
             _uiState.update { it.copy(error = error) }
             return
@@ -524,17 +575,52 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Adds [delta] to the streaming reply. The first delta shows at once; later ones are shown
+     * together every [STREAM_UPDATE_MILLIS], so a long reply does not rebuild the chat for every
+     * few characters.
+     */
     private fun appendDelta(replyId: Long, delta: String) {
-        updateMessage(replyId) {
-            val text = it.text + delta
-            val streaming = parser.streaming(text)
-            it.copy(
-                text = text,
-                shownText = streaming.prose,
-                recipeStatus = if (streaming.hasJson) RecipeStatus.BUILDING else RecipeStatus.NONE,
-            )
+        val buffer = replyBuffer?.takeIf { it.replyId == replyId } ?: return
+        buffer.append(delta)
+        replyDirty = true
+        if (updateJob == null) {
+            showStream()
+            updateJob = viewModelScope.launch {
+                do {
+                    delay(STREAM_UPDATE_MILLIS)
+                } while (showStream())
+                updateJob = null
+            }
         }
         persistPartial(replyId)
+    }
+
+    /** Shows the streaming reply's text if it changed since it was last shown; false when it had not. */
+    private fun showStream(): Boolean {
+        val buffer = replyBuffer
+        if (!replyDirty || buffer == null) return false
+        replyDirty = false
+        updateMessage(buffer.replyId) { it.streamed(buffer) }
+        return true
+    }
+
+    /** This reply with the text that has streamed into [buffer]. */
+    private fun ChatMessage.streamed(buffer: ReplyBuffer): ChatMessage {
+        val (text, streaming) = buffer.streaming()
+        return copy(
+            text = text,
+            shownText = streaming.prose,
+            recipeStatus = if (streaming.hasJson) RecipeStatus.BUILDING else RecipeStatus.NONE,
+        )
+    }
+
+    /** The stream ended: everything that arrived is shown, and the buffer is let go. */
+    private fun endStream() {
+        updateJob?.cancel()
+        updateJob = null
+        showStream()
+        replyBuffer = null
     }
 
     private fun onRetryWait(seconds: Int?) {
@@ -591,7 +677,7 @@ class ChatViewModel @Inject constructor(
     }
 
     /** Shows the stored conversation [id] in [target], unless the user has moved on or started typing turns meanwhile. */
-    private suspend fun load(target: Session, id: Long) {
+    private suspend fun load(target: Session, id: Long, keepComposer: Boolean = false) {
         val messages = chats.open(id)
         val saved = try {
             recipes.saved(messages.flatMap { m -> m.recipes.map { it.id } })
@@ -609,7 +695,7 @@ class ChatViewModel @Inject constructor(
                 conversationId = id,
                 savedVersions = saved,
                 // A restored chat shows its replies; the composer folds away as it does after a request.
-                composer = it.composer.copy(expanded = messages.isEmpty()),
+                composer = if (keepComposer) it.composer else it.composer.copy(expanded = messages.isEmpty()),
             )
         }
     }
@@ -640,7 +726,8 @@ class ChatViewModel @Inject constructor(
         val target = session
         enqueue {
             partialWriteQueued = false
-            val reply = message(replyId)
+            // The text that has arrived, which the screen may not show yet.
+            val reply = message(replyId)?.let { m -> replyBuffer?.takeIf { it.replyId == replyId }?.let { m.streamed(it) } ?: m }
             if (target === session && reply?.replyState == ReplyState.STREAMING) store(target, reply)
         }
     }
@@ -656,5 +743,16 @@ class ChatViewModel @Inject constructor(
                 if (target === session) _uiState.update { it.copy(conversationId = started) }
             }
         }
+    }
+
+    private companion object {
+        /** The streaming reply is shown at most this often, which still reads as smooth typing. */
+        const val STREAM_UPDATE_MILLIS = 50L
+
+        const val KEY_INPUT = "chat.input"
+        const val KEY_SCOPE = "chat.composer.scope"
+        const val KEY_COUNT = "chat.composer.count"
+        const val KEY_PREFERENCES = "chat.composer.preferences"
+        const val KEY_EXPANDED = "chat.composer.expanded"
     }
 }

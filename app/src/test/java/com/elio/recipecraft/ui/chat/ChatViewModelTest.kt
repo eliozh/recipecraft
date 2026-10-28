@@ -1,5 +1,6 @@
 package com.elio.recipecraft.ui.chat
 
+import androidx.lifecycle.SavedStateHandle
 import app.cash.turbine.test
 import com.elio.recipecraft.data.chat.ChatMessage
 import com.elio.recipecraft.data.chat.ChatRepository
@@ -72,7 +73,7 @@ class ChatViewModelTest {
     )
     private val assembler = RecipeAssembler(clock) { "id-${++ids}" }
 
-    private fun newViewModel() = ChatViewModel(
+    private fun newViewModel(savedState: SavedStateHandle = SavedStateHandle()) = ChatViewModel(
         clientFactory = factory,
         promptBuilder = promptBuilder,
         parser = RecipeParser(),
@@ -81,6 +82,7 @@ class ChatViewModelTest {
         recipes = recipes,
         recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, nutrition, clock),
         chats = chats,
+        savedState = savedState,
     )
 
     private fun fixture(name: String) =
@@ -1140,7 +1142,7 @@ class ChatViewModelTest {
 
         vm.onRetry(failed.id)
         reply(fixture("en_breakfast.txt"))
-        assertEquals(listOf(0L, 2L), stored().map { it[0] })
+        assertEquals(listOf(0L, 1L), stored().map { it[0] })
         assertEquals(1, newViewModel().uiState.value.messages.last().recipes.size)
     }
 
@@ -1153,5 +1155,85 @@ class ChatViewModelTest {
         assertEquals(listOf(Role.USER to "Hi", Role.ASSISTANT to "Hello"), vm.uiState.value.texts)
         assertNull(vm.uiState.value.conversationId)
         assertTrue(chatDao.conversations.isEmpty())
+    }
+
+    @Test
+    fun `retrying an earlier reply keeps its place and sends only the turns before it`() = runTest {
+        val vm = newViewModel()
+        vm.send("First")
+        client.events.send(LlmEvent.Delta("Half an ans"))
+        client.events.send(LlmEvent.Error(LlmErrorKind.Network))
+        vm.send("Second")
+        reply("Two.")
+        val failed = vm.uiState.value.messages[1]
+        assertEquals(ReplyState.ERROR, failed.replyState)
+
+        vm.onRetry(failed.id)
+        val resent = client.requests.last().messages
+        assertEquals(1, resent.size)
+        assertTrue(resent.single().content.startsWith("First\n"))
+        reply("One.")
+
+        val state = vm.uiState.value
+        assertEquals(
+            listOf(Role.USER to "First", Role.ASSISTANT to "One.", Role.USER to "Second", Role.ASSISTANT to "Two."),
+            state.texts,
+        )
+        assertEquals(listOf(0L, 1L, 2L, 3L), state.messages.map { it.id })
+        assertEquals(1L, state.messages[1].id)
+        assertEquals(
+            listOf(
+                listOf(0L, Role.USER, "First", ReplyState.DONE),
+                listOf(1L, Role.ASSISTANT, "One.", ReplyState.DONE),
+                listOf(2L, Role.USER, "Second", ReplyState.DONE),
+                listOf(3L, Role.ASSISTANT, "Two.", ReplyState.DONE),
+            ),
+            stored(),
+        )
+        assertEquals(state.texts, newViewModel().uiState.value.texts)
+    }
+
+    @Test
+    fun `a reply streamed a character at a time ends with the same text and recipes`() = runTest {
+        val text = fixture("en_breakfast.txt")
+        val whole = newViewModel()
+        whole.send("Give me a breakfast recipe")
+        reply(text)
+        val expected = whole.uiState.value.messages.last()
+
+        val vm = newViewModel()
+        vm.onNewChat()
+        vm.send("Give me a breakfast recipe")
+        vm.uiState.test {
+            skipItems(1)
+            text.forEach { client.events.send(LlmEvent.Delta(it.toString())) }
+            client.events.send(LlmEvent.Done(null))
+            val updates = cancelAndConsumeRemainingEvents().size
+            assertTrue("$updates updates for ${text.length} deltas", updates < text.length / 10)
+        }
+
+        val streamed = vm.uiState.value.messages.last()
+        assertEquals(text, streamed.text)
+        assertEquals(expected.shownText, streamed.shownText)
+        assertEquals(expected.recipes.map { it.copy(id = "") }, streamed.recipes.map { it.copy(id = "") })
+        assertEquals(1, streamed.recipes.size)
+        assertEquals(text, stored().last()[2])
+    }
+
+    @Test
+    fun `the half-typed input and the composer survive the process being stopped`() = runTest {
+        val saved = SavedStateHandle()
+        val vm = newViewModel(saved)
+        vm.onInputChanged("Something with tof")
+        vm.onScopeChanged(GenerationScope.DINNER)
+        vm.onCountChanged(3)
+        vm.onPreferencesChanged("no peanuts")
+        vm.onComposerExpandedChanged(false)
+
+        // A new process gets back only what the handle saved.
+        val restored = newViewModel(SavedStateHandle(saved.keys().associateWith { saved.get<Any>(it) }))
+        val state = restored.uiState.value
+        assertEquals("Something with tof", state.input)
+        assertEquals(ComposerState(GenerationScope.DINNER, 3, "no peanuts", expanded = false), state.composer)
     }
 }

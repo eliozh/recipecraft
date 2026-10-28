@@ -1,5 +1,6 @@
 package com.elio.recipecraft.ui.library
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -99,6 +100,7 @@ class SaveToLibraryTest {
             recipes = repository,
             recipeModifier = RecipeModifier(factory, promptBuilder, RecipeParser(), assembler, noTables, Clock.systemUTC()),
             chats = ChatRepository(database.chats(), Clock.systemUTC(), Dispatchers.IO),
+            savedState = SavedStateHandle(),
         )
         val library = LibraryViewModel(repository, UndoDelete(), ExportImportService(repository, Clock.systemUTC(), Dispatchers.IO), AndroidRecipeDocuments(context))
         compose.setContent {
