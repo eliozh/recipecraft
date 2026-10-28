@@ -60,7 +60,8 @@ Decisions the user confirmed:
 - **Export/import:** JSON export (`RecipeExport(version, recipes)`) through the Storage Access Framework, which preserves every recipe field, including `nameEn` and `grams`, and can be re-imported, with dedupe by id. Nutrition tables and keys are never exported. Single recipes can also be shared as Markdown/plain text through the share sheet.
 - **Adaptive layout:** the layout is driven by `WindowSizeClass` and Jetpack WindowManager.
   - Compact: single-pane navigation.
-  - Medium/Expanded (unfolded or tablet): library and detail side by side.
+  - Medium (unfolded portrait, small tablet): navigation rail, single pane.
+  - Expanded (tablet, landscape, desktop window): navigation rail plus library and detail side by side.
   - **Cover mode** (compact width *and* compact height, the near-square small window): a dedicated layout with the essentials only, large touch targets, and a **Cook mode** that shows one step at a time in large type with the screen kept on.
   - The activity is resizable and handles size changes without losing state.
 
@@ -237,7 +238,7 @@ T8 creates `AppDatabase` and T10 adds `recipes` to it, so T8 → T10 is sequenti
 - Configure R8 rules for kotlinx.serialization, Room, and Tink. Add a signed release configuration that reads the keystore from properties outside git (the user supplies the keystore). Add Settings > About with the version, the calorie disclaimer, and the USDA attribution from `NOTICE`.
 - AC: the release APK runs generation, calorie matching, CSV import, and export without crashing. No keystore or signing secret is in the repo. About shows the disclaimer and attribution in both languages.
 - Verify: `./gradlew test koverVerify assembleRelease`, then a manual run of the release APK on the Z Flip 8.
-- Files: `app/proguard-rules.pro`, `app/build.gradle.kts`, `ui/settings/AboutScreen.kt`, `.gitignore`.
+- Files: `app/proguard-rules.pro`, `app/build.gradle.kts`, `ui/settings/AboutSection.kt` (a Settings section, like Nutrition tables), `README.md`, `keystore.properties.example`.
 
 ### Checkpoint C (complete)
 - [ ] All `SPEC.md` success criteria met, and unit and instrumented tests pass
