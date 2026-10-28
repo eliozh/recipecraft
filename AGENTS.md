@@ -74,6 +74,18 @@ export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9
 ./gradlew connectedDebugAndroidTest   # needs the Pixel_10_Pro_API37 AVD running
 ```
 
+## Releases
+
+`.github/workflows/release.yml` runs when a `vX.Y.Z` tag is pushed to GitHub. It runs `test lint koverVerify`, builds a signed `assembleRelease` and publishes a GitHub Release with `RecipeCraft-vX.Y.Z.apk` attached. Nothing runs for a tag that exists only locally.
+
+- **Version:** the tag sets it. `appVersion()` in `app/build.gradle.kts` reads `RECIPECRAFT_VERSION` and computes versionCode = X·10000 + Y·100 + Z, so Y and Z stay below 100. Local builds are 0.1.0. Don't hardcode a version in Gradle.
+- **Signing:** the release keystore is `~/.recipecraft/release.jks`, and its values are in `~/.recipecraft/keystore.properties`. CI gets it from the repo secrets `RECIPECRAFT_KEYSTORE_BASE64`, `RECIPECRAFT_KEYSTORE_PASSWORD`, `RECIPECRAFT_KEY_ALIAS` and `RECIPECRAFT_KEY_PASSWORD`. Every release must use this keystore, because an APK signed with another key can't update an installed app. Never print, commit or regenerate it.
+- **Cutting a release:** the user decides when to release, and only the user tags and pushes. When `main` has gathered user-visible changes worth shipping (a finished checkpoint, a batch of `feat`/`fix` commits, or a fix for a bug users hit), tell the user it's time to release. Propose the next version from the commits since the last tag (`git describe --tags --abbrev=0`): any `feat` → minor, only `fix`/`perf` → patch, any `BREAKING CHANGE` → major (while on 0.x, minor). Give the commands:
+
+  ```bash
+  git tag -a v0.2.0 -m "RecipeCraft v0.2.0" && git push origin v0.2.0
+  ```
+
 ## Hard rules
 
 - API keys go only into `SecretStore` (Tink plus the Keystore). They never appear in logs, exports, fixtures or commits. Test fixtures use placeholder keys.

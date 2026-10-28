@@ -22,8 +22,10 @@ android {
         applicationId = "com.elio.recipecraft"
         minSdk = 34
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        // Release builds pass the version in from the git tag; see appVersion().
+        val version = appVersion()
+        versionCode = version.code
+        versionName = version.name
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -78,6 +80,24 @@ android {
         // The Compose tests render the same synthetic LLM replies the JVM tests parse.
         getByName("androidTest").resources.directories.add("src/test/resources")
     }
+}
+
+class AppVersion(val name: String, val code: Int)
+
+/**
+ * The app version, from the `RECIPECRAFT_VERSION` environment variable (the release workflow sets
+ * it from a `vX.Y.Z` tag), or 0.1.0 for local builds. The version code is X * 10000 + Y * 100 + Z,
+ * so it grows with every release; the minor and patch parts must stay below 100.
+ */
+fun appVersion(): AppVersion {
+    val name = providers.environmentVariable("RECIPECRAFT_VERSION").orNull?.trim()?.removePrefix("v")
+        ?.takeIf { it.isNotEmpty() } ?: "0.1.0"
+    val parts = Regex("""(\d+)\.(\d+)\.(\d+)""").matchEntire(name)?.groupValues?.drop(1)?.map { it.toInt() }
+    require(parts != null && parts[1] < 100 && parts[2] < 100) {
+        "RECIPECRAFT_VERSION must look like X.Y.Z with Y and Z below 100, got \"$name\""
+    }
+    val (major, minor, patch) = parts
+    return AppVersion(name, major * 10000 + minor * 100 + patch)
 }
 
 /**
