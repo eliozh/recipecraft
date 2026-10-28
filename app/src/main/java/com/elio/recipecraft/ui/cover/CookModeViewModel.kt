@@ -69,6 +69,12 @@ class CookModeViewModel @Inject constructor(
 
     private var ticker: Job? = null
 
+    /**
+     * The version of the recipe the timers belong to: its `updatedAt` and step count. Timers are
+     * kept by step position, so once the recipe changes they would count for the wrong steps.
+     */
+    private var timersFor: LongArray? = savedStateHandle[KEY_TIMERS_FOR]
+
     init {
         if (recipeId == null) {
             _uiState.update { it.copy(loading = false, notFound = true) }
@@ -122,6 +128,20 @@ class CookModeViewModel @Inject constructor(
 
     private fun saveTimers() {
         savedStateHandle[KEY_TIMERS] = _uiState.value.timers.toLongArray()
+        savedStateHandle[KEY_TIMERS_FOR] = timersFor
+    }
+
+    /**
+     * Ties the timers to [recipe]: timers set for another version of it, such as before it was
+     * translated or replaced, are dropped.
+     */
+    private fun keepTimersFor(recipe: Recipe) {
+        val version = longArrayOf(recipe.updatedAt, recipe.steps.size.toLong())
+        if (timersFor?.contentEquals(version) == true) return
+        val hadTimers = _uiState.value.timers.isNotEmpty()
+        timersFor = version
+        if (hadTimers) _uiState.update { it.copy(timers = emptyMap()) }
+        saveTimers()
     }
 
     private suspend fun observe(id: String) {
@@ -131,6 +151,7 @@ class CookModeViewModel @Inject constructor(
                 _uiState.update { it.copy(loading = false, loadFailed = true) }
             }
             .collect { detail ->
+                detail?.let { keepTimersFor(it.recipe) }
                 _uiState.update { state ->
                     if (detail == null) {
                         state.copy(loading = false, recipe = null, notFound = true)
@@ -153,6 +174,7 @@ class CookModeViewModel @Inject constructor(
         const val ARG_RECIPE_ID = "recipeId"
         private const val KEY_PAGE = "cook_page"
         private const val KEY_TIMERS = "cook_timers"
+        private const val KEY_TIMERS_FOR = "cook_timers_for"
 
         /** Often enough that the seconds on screen never lag by a visible step. */
         internal const val TICK_MILLIS = 250L

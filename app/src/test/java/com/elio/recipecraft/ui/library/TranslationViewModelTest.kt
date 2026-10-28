@@ -161,6 +161,24 @@ class TranslationViewModelTest {
         assertEquals(3, vm.uiState.value.offer?.count)
     }
 
+    @Test
+    fun `switching back while the offer is shown closes it, and switching again offers it again`() = runTest(UnconfinedTestDispatcher()) {
+        switchToChineseWithEnglishRecipes()
+        val vm = viewModel()
+        vm.onResume()
+        assertEquals(TranslationOffer(3, Language.EN, Language.ZH), vm.uiState.value.offer)
+
+        language.resolved = Language.EN
+        vm.onResume()
+        assertNull(vm.uiState.value.offer)
+        vm.onTranslate() // Nothing to answer.
+        assertEquals(TranslationBatchState.Idle, vm.uiState.value.batch)
+
+        language.resolved = Language.ZH
+        vm.onResume()
+        assertEquals(TranslationOffer(3, Language.EN, Language.ZH), vm.uiState.value.offer)
+    }
+
     private fun reply(text: String) {
         client.events.trySend(LlmEvent.Delta(text))
         client.events.trySend(LlmEvent.Done(null))

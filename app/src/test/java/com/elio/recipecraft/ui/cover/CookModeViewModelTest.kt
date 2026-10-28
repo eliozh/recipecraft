@@ -150,6 +150,48 @@ class CookModeViewModelTest {
         assertEquals(2, vm.uiState.value.page)
     }
 
+    @Test
+    fun timersOfAnotherVersionOfTheRecipeAreDroppedOnRestore() = scope.runTest {
+        repository.save(listOf(recipe))
+        val handle = SavedStateHandle(mapOf(CookModeViewModel.ARG_RECIPE_ID to recipe.id))
+        val first = viewModel(handle)
+        runCurrent()
+        first.startTimer(1)
+        runCurrent()
+
+        // The recipe was replaced while the process was gone: a new step comes first.
+        val replaced = recipe.copy(
+            steps = listOf(Step(1, "Boil water", 5)) + recipe.steps.map { it.copy(index = it.index + 1) },
+            updatedAt = recipe.updatedAt + 1,
+        )
+        repository.update(replaced)
+        val second = viewModel(handle)
+        runCurrent()
+        val state = second.uiState.value
+        assertTrue(state.timers.isEmpty())
+        assertEquals(CookTimer.ofMinutes(2), state.timer(2))
+        assertEquals(CookTimer.ofMinutes(5), state.timer(0))
+    }
+
+    @Test
+    fun timersAreDroppedWhenTheRecipeChangesWhileCookModeIsOpen() = scope.runTest {
+        repository.save(listOf(recipe))
+        val vm = viewModel()
+        runCurrent()
+        vm.startTimer(1)
+        runCurrent()
+
+        repository.update(recipe.copy(name = "Soupe", updatedAt = recipe.updatedAt + 1))
+        runCurrent()
+        assertTrue(vm.uiState.value.timers.isEmpty())
+
+        // Timers started on the new version are kept as it updates again with nothing changed.
+        vm.startTimer(1)
+        repository.update(recipe.copy(name = "Soupe", updatedAt = recipe.updatedAt + 1))
+        runCurrent()
+        assertEquals(setOf(1), vm.uiState.value.timers.keys)
+    }
+
     private fun assertEquals(expected: Long, actual: Long, delta: Double) =
         org.junit.Assert.assertEquals(expected.toDouble(), actual.toDouble(), delta)
 }

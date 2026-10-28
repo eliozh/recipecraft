@@ -1,5 +1,6 @@
 package com.elio.recipecraft.data.recipe
 
+import com.elio.recipecraft.data.nutrition.CalorieCalculator
 import com.elio.recipecraft.domain.CalorieSource
 import com.elio.recipecraft.domain.Calories
 import com.elio.recipecraft.domain.Language
@@ -115,6 +116,28 @@ class RecipeRepositoryTest {
         // The table goes away: back to the model's own estimate.
         assertEquals(1, repository.recalculate(emptyList()))
         assertEquals(Calories(300, 150, CalorieSource.AI_ESTIMATE, 300), dao.recipes.first { it.id == "eggs" }.calories)
+    }
+
+    @Test
+    fun `a recipe translated while calories are worked out keeps the calories of its new version`() = runTest {
+        repository.save(listOf(testRecipe("eggs", ingredients = listOf(ingredient("egg")), aiTotal = 300)))
+        val lookups = listOf(lookupOf("egg" to 143.0, "鸡蛋" to 155.0))
+        val read = dao.recipes.single().toDomain()
+        val translated = read.copy(
+            name = "鸡蛋",
+            ingredients = listOf(ingredient("鸡蛋")),
+            language = Language.ZH,
+            updatedAt = read.updatedAt + 1,
+        )
+        nutrition.lookups = lookups
+        // The translation is written after the recalculation read the recipe and before it writes.
+        dao.afterNextRead = { repository.update(translated) }
+
+        assertEquals(0, repository.recalculate(lookups))
+        assertEquals(emptyList<String>(), dao.calorieWrites)
+        val stored = dao.recipes.single().toDomain()
+        assertEquals("鸡蛋", stored.name)
+        assertEquals(CalorieCalculator.calculate(translated, lookups), stored.calories)
     }
 
     @Test

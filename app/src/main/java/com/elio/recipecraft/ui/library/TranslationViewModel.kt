@@ -41,9 +41,13 @@ class TranslationViewModel @Inject constructor(
     val uiState: StateFlow<TranslationUiState> = combine(offer, translations.batch, ::TranslationUiState)
         .stateIn(viewModelScope, SharingStarted.Eagerly, TranslationUiState(batch = translations.batch.value))
 
-    /** At start and on every resume, since the language can change in system Settings meanwhile. */
+    /**
+     * At start and on every resume, since the language can change in system Settings meanwhile.
+     * An offer on screen is checked again too, so switching back, or on to another language,
+     * replaces or closes it rather than offering the wrong language.
+     */
     fun onResume() {
-        if (offer.value != null || checking?.isActive == true) return
+        if (checking?.isActive == true) return
         if (translations.batch.value is TranslationBatchState.Running) return
         checking = viewModelScope.launch {
             offer.value = try {
@@ -51,9 +55,9 @@ class TranslationViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: IOException) {
-                null // Settings unreadable: offer again on the next resume.
+                return@launch // Settings unreadable: check again on the next resume.
             } catch (_: RuntimeException) {
-                null // Room reports an unreadable database as a runtime exception.
+                return@launch // Room reports an unreadable database as a runtime exception.
             }
         }
     }
@@ -74,6 +78,8 @@ class TranslationViewModel @Inject constructor(
     /** Closes the offer and stores the language, so it is not offered again on the next resume. */
     private fun answer(): TranslationOffer? {
         val current = offer.value ?: return null
+        // A check still running must not bring the answered offer back.
+        checking?.cancel()
         offer.value = null
         viewModelScope.launch {
             try {

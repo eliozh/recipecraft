@@ -65,14 +65,23 @@ abstract class RecipeDao {
     @Query("DELETE FROM recipes WHERE id = :id")
     abstract suspend fun deleteById(id: String)
 
-    @Query("UPDATE recipes SET calories = :calories WHERE id = :id")
-    abstract suspend fun setCalories(id: String, calories: Calories)
+    /**
+     * Writes [calories] only while the recipe is still the version last updated at
+     * [seenUpdatedAt]; returns 0, and writes nothing, when it changed or went meanwhile.
+     */
+    @Query("UPDATE recipes SET calories = :calories WHERE id = :id AND updatedAt = :seenUpdatedAt")
+    abstract suspend fun setCalories(id: String, calories: Calories, seenUpdatedAt: Long): Int
 
-    /** Writes only the calories, so a recipe saved or edited meanwhile keeps its other fields. */
+    /**
+     * Writes only the calories, so a recipe saved or edited meanwhile keeps its other fields, and
+     * only to the versions they were worked out from. Returns how many recipes were written.
+     */
     @Transaction
-    open suspend fun setCalories(changes: Map<String, Calories>) {
-        changes.forEach { (id, calories) -> setCalories(id, calories) }
-    }
+    open suspend fun setCalories(changes: List<CalorieChange>): Int =
+        changes.sumOf { setCalories(it.id, it.calories, it.seenUpdatedAt) }
+
+    /** New [calories] for the recipe [id], worked out from its version last updated at [seenUpdatedAt]. */
+    data class CalorieChange(val id: String, val calories: Calories, val seenUpdatedAt: Long)
 
     companion object {
         /** Escapes LIKE's wildcards in [text], to match the `ESCAPE '\'` of [observe]. */

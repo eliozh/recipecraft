@@ -125,7 +125,9 @@ class RecipeRepository @Inject constructor(
 
     /**
      * Recalculates every saved recipe's calories against [lookups] and writes back only those that
-     * changed. The model's own estimate is kept. Returns how many recipes changed.
+     * changed. The model's own estimate is kept. A recipe translated, replaced or deleted while
+     * this runs is left alone, so its new version never gets calories worked out from the old one.
+     * Returns how many recipes changed.
      */
     suspend fun recalculate(lookups: List<NutritionLookup>): Int {
         val changes = withContext(ioDispatcher) {
@@ -133,12 +135,10 @@ class RecipeRepository @Inject constructor(
                 .map { it.toDomain() }
                 .mapNotNull { recipe ->
                     val calories = CalorieCalculator.calculate(recipe, lookups)
-                    if (calories == recipe.calories) null else recipe.id to calories
+                    if (calories == recipe.calories) null else RecipeDao.CalorieChange(recipe.id, calories, recipe.updatedAt)
                 }
-                .toMap()
         }
-        if (changes.isNotEmpty()) dao.setCalories(changes)
-        return changes.size
+        return if (changes.isEmpty()) 0 else dao.setCalories(changes)
     }
 }
 

@@ -155,7 +155,7 @@ class FakeRecipeDao : RecipeDao() {
 
     override suspend fun all(): List<RecipeEntity> {
         if (failReads) throw IllegalStateException("database unreadable")
-        return state.value
+        return state.value.also { afterNextRead?.let { write -> afterNextRead = null; write() } }
     }
 
     override suspend fun byIds(ids: List<String>): List<RecipeEntity> = all().filter { it.id in ids }
@@ -196,9 +196,14 @@ class FakeRecipeDao : RecipeDao() {
 
     override suspend fun deleteById(id: String) = write { all -> all.filter { it.id != id } }
 
-    override suspend fun setCalories(id: String, calories: Calories) {
+    /** Runs once, right after the next [all], as a write that lands while the caller works on what it read. */
+    var afterNextRead: (suspend () -> Unit)? = null
+
+    override suspend fun setCalories(id: String, calories: Calories, seenUpdatedAt: Long): Int {
+        if (state.value.none { it.id == id && it.updatedAt == seenUpdatedAt }) return 0
         calorieWrites += id
         write { all -> all.map { if (it.id == id) it.copy(calories = calories) else it } }
+        return 1
     }
 
     private fun readable() = state.onStart { if (failReads) throw IllegalStateException("database unreadable") }

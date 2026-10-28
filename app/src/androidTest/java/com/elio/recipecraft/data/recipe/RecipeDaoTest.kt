@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -143,10 +144,22 @@ class RecipeDaoTest {
     fun setCaloriesChangesOnlyTheCalories() = runBlocking {
         repository.save(listOf(recipe("a", "Eggs"), recipe("b", "More eggs")))
         val calories = Calories(143, 72, CalorieSource.DATABASE, 300)
-        dao.setCalories(mapOf("a" to calories))
+        val seen = recipe("a", "Eggs").updatedAt
+        assertEquals(1, dao.setCalories(listOf(RecipeDao.CalorieChange("a", calories, seen))))
 
         val (a, b) = dao.all()
         assertEquals(recipe("a", "Eggs").copy(calories = calories), a.toDomain())
         assertEquals(recipe("b", "More eggs"), b.toDomain())
+    }
+
+    @Test
+    fun setCaloriesSkipsARecipeChangedSinceItWasRead() = runBlocking {
+        repository.save(listOf(recipe("a", "Eggs")))
+        val seen = dao.all().single().updatedAt
+        dao.update(dao.all().single().copy(name = "Oeufs", updatedAt = seen + 1))
+
+        val calories = Calories(143, 72, CalorieSource.DATABASE, 300)
+        assertEquals(0, dao.setCalories(listOf(RecipeDao.CalorieChange("a", calories, seen))))
+        assertNotEquals(calories, dao.all().single().calories)
     }
 }
