@@ -159,8 +159,8 @@ class CookModeTest {
                             detailViewModel = {
                                 viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations, modifier, Clock.systemUTC()) }
                             },
-                            paneDetailViewModel = { id ->
-                                viewModel(key = id) {
+                            paneDetailViewModel = { owner, id ->
+                                viewModel(viewModelStoreOwner = owner, key = id) {
                                     val args = SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to id))
                                     RecipeDetailViewModel(args, repository, undoDelete, english, translations, modifier, Clock.systemUTC())
                                 }

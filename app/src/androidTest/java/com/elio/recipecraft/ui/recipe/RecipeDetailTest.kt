@@ -23,6 +23,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.createSavedStateHandle
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
@@ -80,9 +81,11 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -169,6 +172,9 @@ class RecipeDetailTest {
         RecipeModifier(ready, promptBuilder, RecipeParser(), RecipeAssembler(Clock.systemUTC()), eggsOnly, Clock.systemUTC())
     }
 
+    /** Every detail view model the pane made, in order. */
+    private val paneViewModels = mutableListOf<RecipeDetailViewModel>()
+
     private fun setContent(layout: AppLayout = AppLayout.Compact) {
         val undoDelete = UndoDelete()
         val library = LibraryViewModel(repository, undoDelete, ExportImportService(repository, Clock.systemUTC(), Dispatchers.IO), AndroidRecipeDocuments(context))
@@ -182,10 +188,11 @@ class RecipeDetailTest {
                             onOpenChat = {},
                             libraryViewModel = { library },
                             detailViewModel = { viewModel { RecipeDetailViewModel(createSavedStateHandle(), repository, undoDelete, english, translations, modifier, Clock.systemUTC()) } },
-                            paneDetailViewModel = { id ->
-                                viewModel(key = id) {
+                            paneDetailViewModel = { owner, id ->
+                                viewModel(viewModelStoreOwner = owner, key = id) {
                                     val args = SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to id))
                                     RecipeDetailViewModel(args, repository, undoDelete, english, translations, modifier, Clock.systemUTC())
+                                        .also { paneViewModels += it }
                                 }
                             },
                         )
@@ -323,11 +330,16 @@ class RecipeDetailTest {
         compose.waitUntil(5_000) {
             compose.onAllNodes(hasTestTag(RecipeDetailTestTags.NAME) and hasText("Peanut butter toast")).fetchSemanticsNodes().size == 1
         }
+        // Only the open recipe's view model is kept; the omelette's stopped observing it.
+        assertEquals(2, paneViewModels.size)
+        assertFalse(paneViewModels[0].viewModelScope.isActive)
+        assertTrue(paneViewModels[1].viewModelScope.isActive)
 
-        // Back closes the pane; the list is still there.
+        // Back closes the pane, and lets its view model go; the list is still there.
         compose.onNodeWithTag(RecipeDetailTestTags.BACK).performClick()
         waitForTag(RecipeDetailTestTags.NAME, 0)
         compose.onNodeWithText(context.getString(R.string.library_select_recipe)).assertExists()
+        compose.waitUntil(5_000) { !paneViewModels[1].viewModelScope.isActive }
 
         // Delete from the pane closes it and the library offers Undo.
         compose.onNodeWithTag(LibraryTestTags.LIST).performScrollToNode(hasText("Cheese omelette"))

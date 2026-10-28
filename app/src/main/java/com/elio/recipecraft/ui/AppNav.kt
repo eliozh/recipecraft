@@ -11,6 +11,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.hilt.lifecycle.viewmodel.compose.rememberHiltViewModelFactory
 import androidx.lifecycle.DEFAULT_ARGS_KEY
 import androidx.lifecycle.HasDefaultViewModelProviderFactory
+import androidx.lifecycle.VIEW_MODEL_STORE_OWNER_KEY
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.MutableCreationExtras
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -30,6 +32,7 @@ import com.elio.recipecraft.R
 import com.elio.recipecraft.ui.chat.ChatScreen
 import com.elio.recipecraft.ui.cover.CookModeScreen
 import com.elio.recipecraft.ui.cover.CookModeViewModel
+import com.elio.recipecraft.ui.library.DetailPaneStore
 import com.elio.recipecraft.ui.library.LibraryListDetail
 import com.elio.recipecraft.ui.library.LibraryScreen
 import com.elio.recipecraft.ui.library.LibraryViewModel
@@ -84,7 +87,8 @@ internal fun NavGraphBuilder.libraryGraph(
     onOpenChat: () -> Unit,
     libraryViewModel: @Composable () -> LibraryViewModel = { hiltViewModel() },
     detailViewModel: @Composable () -> RecipeDetailViewModel = { hiltViewModel() },
-    paneDetailViewModel: @Composable (recipeId: String) -> RecipeDetailViewModel = { id -> hiltPaneDetailViewModel(id) },
+    paneDetailViewModel: @Composable (owner: ViewModelStoreOwner, recipeId: String) -> RecipeDetailViewModel =
+        { owner, id -> hiltPaneDetailViewModel(owner, id) },
     cookViewModel: @Composable () -> CookModeViewModel = { hiltViewModel() },
 ) {
     val onCook = { id: String -> navController.navigate(cookRoute(id)) }
@@ -92,14 +96,18 @@ internal fun NavGraphBuilder.libraryGraph(
         composable(LIBRARY_ROUTE) { entry ->
             val selectedId by entry.savedStateHandle.getStateFlow<String?>(SELECTED_RECIPE_KEY, null)
                 .collectAsStateWithLifecycle()
-            if (LocalAppLayout.current.listDetail) {
+            val listDetail = LocalAppLayout.current.listDetail
+            val pane = viewModel<DetailPaneStore>()
+            // Closing the pane, or the window getting narrow, lets the last recipe's view model go.
+            LaunchedEffect(pane, selectedId, listDetail) { if (!listDetail || selectedId == null) pane.keepOnly(null) }
+            if (listDetail) {
                 LibraryListDetail(
                     selectedId = selectedId,
                     onSelect = { id -> entry.savedStateHandle[SELECTED_RECIPE_KEY] = id },
                     onOpenChat = onOpenChat,
                     onCook = onCook,
                     libraryViewModel = libraryViewModel(),
-                    detailViewModel = paneDetailViewModel,
+                    detailViewModel = { id -> paneDetailViewModel(pane.ownerFor(id), id) },
                 )
             } else {
                 // The window got narrow with a recipe open beside the list: open it on its own screen.
@@ -146,19 +154,21 @@ internal fun NavGraphBuilder.libraryGraph(
 }
 
 /**
- * A detail view model for the pane, one per recipe, kept by the library's back stack entry. The
- * recipe id goes in as the default arguments, where the detail route would put it.
+ * The pane's detail view model for [recipeId], kept in [owner], the open recipe's store in
+ * [DetailPaneStore]. The recipe id goes in as the default arguments, where the detail route would
+ * put it, and the view model's saved state lives and goes with [owner].
  */
 @Composable
-private fun hiltPaneDetailViewModel(recipeId: String): RecipeDetailViewModel {
-    val owner = checkNotNull(LocalViewModelStoreOwner.current) { "No ViewModelStoreOwner" }
-    val defaults = owner as HasDefaultViewModelProviderFactory
+private fun hiltPaneDetailViewModel(owner: ViewModelStoreOwner, recipeId: String): RecipeDetailViewModel {
+    val entry = checkNotNull(LocalViewModelStoreOwner.current) { "No ViewModelStoreOwner" }
+    val defaults = entry as HasDefaultViewModelProviderFactory
     return viewModel(
         viewModelStoreOwner = owner,
         key = "recipe_detail_pane/$recipeId",
         factory = rememberHiltViewModelFactory(defaults.defaultViewModelProviderFactory),
         extras = MutableCreationExtras(defaults.defaultViewModelCreationExtras).apply {
             set(DEFAULT_ARGS_KEY, bundleOf(RecipeDetailViewModel.ARG_RECIPE_ID to recipeId))
+            set(VIEW_MODEL_STORE_OWNER_KEY, owner)
         },
     )
 }
