@@ -7,27 +7,19 @@ import com.elio.recipecraft.data.llm.TranslationError
 import com.elio.recipecraft.data.nutrition.RowError
 import com.elio.recipecraft.data.nutrition.TableImportError
 import com.elio.recipecraft.data.recipe.RecipeImportError
-import java.io.File
-import javax.xml.parsers.DocumentBuilderFactory
+import com.elio.recipecraft.testing.stringResources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.w3c.dom.Element
 
 /** Every error maps to a message that exists, and is not blank, in English and in Chinese. */
 class ErrorMessagesTest {
 
     /** The `<string>` and `<plurals>` texts of one strings.xml, by type and name. */
-    private fun resources(dir: String): Map<Pair<String, String>, String> {
-        val file = File("src/main/res/$dir/strings.xml")
-        val root = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).documentElement
-        val children = root.childNodes
-        return (0 until children.length).mapNotNull { children.item(it) as? Element }
-            .filter { it.tagName == "string" || it.tagName == "plurals" }
-            .associate { (it.tagName to it.getAttribute("name")) to it.textContent.trim() }
-    }
+    private fun resources(dir: String): Map<Pair<String, String>, String> =
+        stringResources(dir).filterKeys { it.first == "string" || it.first == "plurals" }.mapValues { it.value.text }
 
     private val english = resources("values")
     private val chinese = resources("values-zh")
@@ -110,11 +102,6 @@ class ErrorMessagesTest {
         AppError.entries.forEach { assertString(it.message) }
         listOf(true, false).forEach { assertBothLanguages("plurals", pluralNames.getValue(ErrorMessages.shortfall(it))) }
         assertString(ErrorMessages.incompleteSet)
-    }
-
-    @Test
-    fun `both languages have the same strings and plurals`() {
-        assertEquals(english.keys, chinese.keys)
     }
 
     @Test
