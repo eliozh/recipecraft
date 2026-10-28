@@ -76,6 +76,17 @@ android {
         }
     }
 
+    splits {
+        // One APK per ABI the bundled native libraries ship for, plus a universal APK that runs
+        // everywhere. The GitHub release attaches all of them; see .github/workflows/release.yml.
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            isUniversalApk = true
+        }
+    }
+
     sourceSets {
         // The Compose tests render the same synthetic LLM replies the JVM tests parse.
         getByName("androidTest").resources.directories.add("src/test/resources")

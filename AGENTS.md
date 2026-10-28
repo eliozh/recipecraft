@@ -76,7 +76,7 @@ export JAVA_HOME=$HOME/.jdks/jdk-21.0.13+9
 
 ## Releases
 
-`.github/workflows/release.yml` runs when a `vX.Y.Z` tag is pushed to GitHub. It runs `test lint koverVerify`, builds a signed `assembleRelease` and publishes a GitHub Release with `RecipeCraft-vX.Y.Z.apk` attached. Nothing runs for a tag that exists only locally.
+`.github/workflows/release.yml` runs when a `vX.Y.Z` tag is pushed to GitHub. It runs `test lint koverVerify`, builds a signed `assembleRelease` and publishes a GitHub Release with one APK per ABI (`RecipeCraft-vX.Y.Z-<abi>.apk` for `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`, plus `universal`) and `SHA256SUMS.txt` attached. The ABI list is in the `splits` block of `app/build.gradle.kts`. If you change it, update the loop in the workflow too. Nothing runs for a tag that exists only locally.
 
 - **Version:** the tag sets it. `appVersion()` in `app/build.gradle.kts` reads `RECIPECRAFT_VERSION` and computes versionCode = X·10000 + Y·100 + Z, so Y and Z stay below 100. Local builds are 0.1.0. Don't hardcode a version in Gradle.
 - **Signing:** the release keystore is `~/.recipecraft/release.jks`, and its values are in `~/.recipecraft/keystore.properties`. CI gets it from the repo secrets `RECIPECRAFT_KEYSTORE_BASE64`, `RECIPECRAFT_KEYSTORE_PASSWORD`, `RECIPECRAFT_KEY_ALIAS` and `RECIPECRAFT_KEY_PASSWORD`. Every release must use this keystore, because an APK signed with another key can't update an installed app. Never print, commit or regenerate it.
