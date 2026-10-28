@@ -4,6 +4,10 @@ import app.cash.turbine.test
 import com.elio.recipecraft.testing.PLACEHOLDER_KEY
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -242,6 +246,24 @@ class AnthropicClientTest {
     }
 
     @Test
+    fun `a slow collector gets every delta in order and the done event`() {
+        val words = (1..SLOW_STREAM_EVENTS).map { "w$it " }
+        val body = buildString {
+            words.forEach {
+                append("event: content_block_delta\n")
+                append("data: {\"type\":\"content_block_delta\",\"delta\":{\"type\":\"text_delta\",\"text\":\"$it\"}}\n\n")
+            }
+            append("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n")
+        }
+        server.enqueue(sse(body).build())
+
+        // Real time, so the reader thread runs far ahead of a collector that is slow on every item.
+        val events = runBlocking { client().stream(request).onEach { delay(2) }.toList() }
+
+        assertEquals(words.map { LlmEvent.Delta(it) } + LlmEvent.Done(null), events)
+    }
+
+    @Test
     fun `an unreachable host is a network error`() = runTest {
         val url = server.url("/")
         server.close()
@@ -284,6 +306,8 @@ class AnthropicClientTest {
     }
 
     private companion object {
+        /** Well past the 64 events a callbackFlow buffers by default. */
+        const val SLOW_STREAM_EVENTS = 300
         const val MODEL = "claude-test"
     }
 }

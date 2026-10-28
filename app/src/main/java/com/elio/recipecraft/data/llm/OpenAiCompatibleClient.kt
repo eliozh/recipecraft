@@ -52,41 +52,38 @@ class OpenAiCompatibleClient(
             .post(json.encodeToString(ChatRequest.serializer(), body).toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
+        val sink = StreamSink(this)
         val listener = object : EventSourceListener() {
             private var usage: Usage? = null
             private var finished = false
 
             override fun onEvent(eventSource: EventSource, id: String?, type: String?, data: String) {
-                if (data.trim() == DONE_MARKER) return finish(LlmEvent.Done(usage))
+                if (data.trim() == DONE_MARKER) return sink.finish(eventSource, LlmEvent.Done(usage))
                 val chunk = try {
                     json.decodeFromString(Chunk.serializer(), data)
                 } catch (_: SerializationException) {
-                    return finish(LlmEvent.Error(LlmErrorKind.MalformedResponse))
+                    return sink.finish(eventSource, LlmEvent.Error(LlmErrorKind.MalformedResponse))
                 } catch (_: IllegalArgumentException) {
-                    return finish(LlmEvent.Error(LlmErrorKind.MalformedResponse))
+                    return sink.finish(eventSource, LlmEvent.Error(LlmErrorKind.MalformedResponse))
                 }
                 chunk.error?.let { error ->
-                    return finish(LlmEvent.Error(providerErrorKind(error.type, error.code?.contentOrNull)))
+                    return sink.finish(eventSource, LlmEvent.Error(providerErrorKind(error.type, error.code?.contentOrNull)))
                 }
                 chunk.usage?.let { usage = Usage(it.promptTokens, it.completionTokens) }
                 chunk.choices.forEach { choice ->
-                    choice.delta?.content?.takeIf { it.isNotEmpty() }?.let { trySend(LlmEvent.Delta(it)) }
+                    choice.delta?.content?.takeIf { it.isNotEmpty() }?.let { sink.send(eventSource, LlmEvent.Delta(it)) }
                     if (choice.finishReason != null) finished = true
                 }
             }
 
             // A stream that ends without [DONE] is complete only if the model said it finished.
-            override fun onClosed(eventSource: EventSource) = finish(
+            override fun onClosed(eventSource: EventSource) = sink.finish(
+                eventSource,
                 if (finished) LlmEvent.Done(usage) else LlmEvent.Error(LlmErrorKind.Network),
             )
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) =
-                finish(LlmEvent.Error(errorKind(t, response), retryAfterMillis(response, clock)))
-
-            private fun finish(event: LlmEvent) {
-                trySend(event)
-                channel.close()
-            }
+                sink.finish(eventSource, LlmEvent.Error(errorKind(t, response), retryAfterMillis(response, clock)))
         }
         val eventSource = EventSources.createFactory(httpClient).newEventSource(httpRequest, listener)
         awaitClose { eventSource.cancel() }

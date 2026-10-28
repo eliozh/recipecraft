@@ -212,4 +212,12 @@ class RetryPolicyTest {
         val delegate = ScriptedClient(flowOf(LlmEvent.Error(LlmErrorKind.Timeout)))
         assertEquals(LlmErrorKind.Timeout, delegate.collectReply(request) {})
     }
+
+    @Test
+    fun `collectReply treats a stream that ends without done or an error as a network error`() = runTest {
+        val delegate = ScriptedClient(flowOf(LlmEvent.Delta("half a re")))
+        val text = StringBuilder()
+        assertEquals(LlmErrorKind.Network, delegate.collectReply(request) { text.append(it) })
+        assertEquals("half a re", text.toString())
+    }
 }

@@ -54,6 +54,7 @@ class AnthropicClient(
             .post(json.encodeToString(MessagesRequest.serializer(), body).toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
+        val sink = StreamSink(this)
         val listener = object : EventSourceListener() {
             private var inputTokens: Int? = null
             private var outputTokens: Int? = null
@@ -62,29 +63,30 @@ class AnthropicClient(
                 val event = try {
                     json.decodeFromString(StreamEvent.serializer(), data)
                 } catch (_: SerializationException) {
-                    return finish(LlmEvent.Error(LlmErrorKind.MalformedResponse))
+                    return sink.finish(eventSource, LlmEvent.Error(LlmErrorKind.MalformedResponse))
                 } catch (_: IllegalArgumentException) {
-                    return finish(LlmEvent.Error(LlmErrorKind.MalformedResponse))
+                    return sink.finish(eventSource, LlmEvent.Error(LlmErrorKind.MalformedResponse))
                 }
                 when (event.type) {
                     "message_start" -> event.message?.usage?.let(::record)
                     "content_block_delta" -> event.delta
                         ?.takeIf { it.type == TEXT_DELTA }
                         ?.text?.takeIf { it.isNotEmpty() }
-                        ?.let { trySend(LlmEvent.Delta(it)) }
+                        ?.let { sink.send(eventSource, LlmEvent.Delta(it)) }
                     "message_delta" -> event.usage?.let(::record)
-                    "message_stop" -> finish(LlmEvent.Done(usage()))
-                    "error" -> finish(LlmEvent.Error(providerErrorKind(event.error?.type, null)))
+                    "message_stop" -> sink.finish(eventSource, LlmEvent.Done(usage()))
+                    "error" -> sink.finish(eventSource, LlmEvent.Error(providerErrorKind(event.error?.type, null)))
                     // ping, content_block_start/stop, and event types added later carry no reply text.
                     else -> Unit
                 }
             }
 
             // Every complete reply ends with message_stop, so closing before it means the reply was cut off.
-            override fun onClosed(eventSource: EventSource) = finish(LlmEvent.Error(LlmErrorKind.Network))
+            override fun onClosed(eventSource: EventSource) =
+                sink.finish(eventSource, LlmEvent.Error(LlmErrorKind.Network))
 
             override fun onFailure(eventSource: EventSource, t: Throwable?, response: Response?) =
-                finish(LlmEvent.Error(errorKind(t, response), retryAfterMillis(response, clock)))
+                sink.finish(eventSource, LlmEvent.Error(errorKind(t, response), retryAfterMillis(response, clock)))
 
             private fun record(usage: WireUsage) {
                 usage.inputTokens?.let { inputTokens = it }
@@ -93,11 +95,6 @@ class AnthropicClient(
 
             private fun usage(): Usage? =
                 if (inputTokens == null && outputTokens == null) null else Usage(inputTokens, outputTokens)
-
-            private fun finish(event: LlmEvent) {
-                trySend(event)
-                channel.close()
-            }
         }
         val eventSource = EventSources.createFactory(httpClient).newEventSource(httpRequest, listener)
         awaitClose { eventSource.cancel() }

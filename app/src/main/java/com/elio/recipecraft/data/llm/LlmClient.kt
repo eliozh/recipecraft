@@ -36,14 +36,15 @@ interface LlmClient {
  * Collects one reply from [stream]: [onDelta] gets each piece of text as it arrives. While a
  * rate-limited request waits to be sent again, [onRetryWait] gets the wait in whole seconds, then
  * null once the next attempt answers. Returns the error that ended the reply, or null when it
- * finished.
+ * finished. A stream that stops without a [LlmEvent.Done] or [LlmEvent.Error] lost its end, so it
+ * counts as a [LlmErrorKind.Network] error rather than a finished reply.
  */
 suspend fun LlmClient.collectReply(
     request: LlmRequest,
     onRetryWait: (Int?) -> Unit = {},
     onDelta: (String) -> Unit,
 ): LlmErrorKind? {
-    var error: LlmErrorKind? = null
+    var error: LlmErrorKind? = LlmErrorKind.Network
     var waiting = false
     stream(request)
         .takeWhile { event ->
@@ -61,7 +62,10 @@ suspend fun LlmClient.collectReply(
                     onRetryWait(event.delaySeconds)
                     true
                 }
-                is LlmEvent.Done -> false
+                is LlmEvent.Done -> {
+                    error = null
+                    false
+                }
                 is LlmEvent.Error -> {
                     error = event.kind
                     false

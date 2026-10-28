@@ -28,6 +28,10 @@ abstract class NetworkModule {
             // The gap allowed between streamed chunks; a whole reply may take much longer.
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            // A redirect would forward the chat body and the key header to another host, so a 3xx
+            // is an error instead.
+            .followRedirects(false)
+            .followSslRedirects(false)
             .build()
 
         @Provides

@@ -4,6 +4,8 @@ import java.io.IOException
 import java.io.InterruptedIOException
 import java.time.Clock
 import kotlin.coroutines.resume
+import kotlinx.coroutines.channels.ProducerScope
+import kotlinx.coroutines.channels.trySendBlocking
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -15,6 +17,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
+import okhttp3.sse.EventSource
 
 // Plumbing shared by the wire-protocol clients. Nothing here reads or keeps an error body.
 
@@ -25,6 +28,35 @@ internal val LlmMessage.Role.wireName: String
         LlmMessage.Role.USER -> "user"
         LlmMessage.Role.ASSISTANT -> "assistant"
     }
+
+/**
+ * Hands a stream's events from OkHttp's reader thread to a `callbackFlow` collector. Each send
+ * blocks while the collector's buffer is full, so a slow collector slows the stream down instead
+ * of losing text. Once a send fails (the collector is gone, or the thread was interrupted) the
+ * request is cancelled and nothing more is sent, and the channel closes without a terminal event,
+ * which [collectReply] treats as a broken stream: a reply missing text never ends as a success.
+ */
+internal class StreamSink(private val scope: ProducerScope<LlmEvent>) {
+    private var closed = false
+
+    fun send(source: EventSource, event: LlmEvent) {
+        if (!closed && scope.trySendBlocking(event).isFailure) abort(source)
+    }
+
+    /** Sends the stream's last event, a [LlmEvent.Done] or [LlmEvent.Error], and closes the channel. */
+    fun finish(source: EventSource, event: LlmEvent) {
+        if (closed) return
+        if (scope.trySendBlocking(event).isFailure) return abort(source)
+        closed = true
+        scope.channel.close()
+    }
+
+    private fun abort(source: EventSource) {
+        closed = true
+        source.cancel()
+        scope.channel.close()
+    }
+}
 
 /** Maps a transport failure or an HTTP error status to an error kind; never reads the body. */
 internal fun errorKind(t: Throwable?, response: Response?): LlmErrorKind = when {
