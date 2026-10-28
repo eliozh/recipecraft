@@ -320,4 +320,11 @@
     <string name="library_search">搜索</string>
     <string name="library_close_search">关闭搜索</string>
     <string name="library_filter">按餐次筛选</string>
+    <string name="settings_about">关于</string>
+    <string name="about_version">版本 %1$s</string>
+    <string name="about_usda_attribution">数据库热量来自美国农业部农业研究局的 USDA FoodData Central（Foundation Foods，2026 年 4 月；SR Legacy，2018 年），以 CC0 1.0 发布。USDA 不为食谱工坊背书。</string>
+    <string name="about_imported_tables">你导入的营养成分表只保存在本设备上。</string>
+    <string name="about_api_keys">API 密钥加密保存在本设备上，只会发送给你配置的服务商。</string>
+    <string name="about_show_notice">完整数据声明</string>
+    <string name="about_notice_title">USDA FoodData Central 数据声明</string>
 </resources>

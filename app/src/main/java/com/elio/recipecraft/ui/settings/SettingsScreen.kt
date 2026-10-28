@@ -69,6 +69,8 @@ private fun SettingsContent(uiState: SettingsUiState, viewModel: SettingsViewMod
             )
             HorizontalDivider(Modifier.padding(vertical = 16.dp))
             NutritionTablesSection()
+            HorizontalDivider(Modifier.padding(vertical = 16.dp))
+            AboutSection()
         }
     }
 }

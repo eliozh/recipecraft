@@ -1,3 +1,4 @@
+import java.util.Properties
 import javax.inject.Inject
 import kotlinx.kover.gradle.plugin.dsl.CoverageUnit
 
@@ -27,9 +28,28 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // Release signing: see README.md. The keystore and its passwords stay outside git, in
+    // keystore.properties at the repo root (gitignored) or in RECIPECRAFT_* environment variables.
+    // Without either, assembleRelease still succeeds and builds an unsigned APK.
+    val releaseSigning = releaseSigningProperties()
+    if (releaseSigning != null) {
+        signingConfigs.create("release") {
+            storeFile = rootProject.file(releaseSigning.getValue("storeFile"))
+            storePassword = releaseSigning.getValue("storePassword")
+            keyAlias = releaseSigning.getValue("keyAlias")
+            keyPassword = releaseSigning.getValue("keyPassword")
+        }
+    } else {
+        logger.info("RecipeCraft: no release keystore configured; the release APK will be unsigned.")
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (releaseSigning != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -58,6 +78,29 @@ android {
         // The Compose tests render the same synthetic LLM replies the JVM tests parse.
         getByName("androidTest").resources.directories.add("src/test/resources")
     }
+}
+
+/**
+ * The release signing values, from `keystore.properties` at the repo root or, when that file is
+ * missing, from the `RECIPECRAFT_KEYSTORE`, `RECIPECRAFT_KEYSTORE_PASSWORD`, `RECIPECRAFT_KEY_ALIAS`
+ * and `RECIPECRAFT_KEY_PASSWORD` environment variables. Returns null when
+ * none is set, and fails the build when only some are.
+ * Never log these values.
+ */
+fun releaseSigningProperties(): Map<String, String>? {
+    val keys = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    val file = providers.fileContents(rootProject.layout.projectDirectory.file("keystore.properties")).asText.orNull
+    val values: Map<String, String?> = if (file != null) {
+        val properties = Properties().apply { load(file.reader()) }
+        keys.associateWith { properties.getProperty(it)?.trim() }
+    } else {
+        val env = listOf("RECIPECRAFT_KEYSTORE", "RECIPECRAFT_KEYSTORE_PASSWORD", "RECIPECRAFT_KEY_ALIAS", "RECIPECRAFT_KEY_PASSWORD")
+        keys.zip(env).associate { (key, name) -> key to providers.environmentVariable(name).orNull }
+    }
+    if (values.values.all { it.isNullOrEmpty() }) return null
+    val missing = values.filterValues { it.isNullOrEmpty() }.keys
+    require(missing.isEmpty()) { "Release signing is partly configured; missing: ${missing.joinToString()}" }
+    return values.mapValues { it.value!! }
 }
 
 /**

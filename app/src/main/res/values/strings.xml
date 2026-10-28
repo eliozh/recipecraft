@@ -339,4 +339,11 @@
     <string name="library_search">Search</string>
     <string name="library_close_search">Close search</string>
     <string name="library_filter">Filter by meal</string>
+    <string name="settings_about">About</string>
+    <string name="about_version">Version %1$s</string>
+    <string name="about_usda_attribution">Database calories come from USDA FoodData Central (Foundation Foods, April 2026; SR Legacy, 2018), U.S. Department of Agriculture, Agricultural Research Service, published under CC0 1.0. USDA does not endorse RecipeCraft.</string>
+    <string name="about_imported_tables">Nutrition tables you import stay on this device.</string>
+    <string name="about_api_keys">API keys are stored encrypted on this device and sent only to the provider you configure.</string>
+    <string name="about_show_notice">Full data notice</string>
+    <string name="about_notice_title">USDA FoodData Central notice</string>
 </resources>
