@@ -1,0 +1,40 @@
+# Runs the pre-commit gate from AGENTS.md on every push to main and every pull request, so a
+# broken commit shows up before a release tag is cut. Instrumented tests stay local (they need
+# the Pixel AVD).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Test, build, lint and check coverage
+        run: ./gradlew test assembleDebug lint koverVerify
+
+      - name: Upload reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: app/build/reports/
+          retention-days: 7
