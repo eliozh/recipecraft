@@ -1,6 +1,11 @@
 package com.elio.recipecraft.ui.recipe
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsDisplayed
@@ -94,8 +99,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Opens a saved recipe from the real library graph: checks every section, deletes it and undoes
- * that, and changes it with Modify with AI against a scripted model, by Replace and Save as copy.
+ * Opens a saved recipe from the real library graph: checks every section, folds them, deletes it
+ * and undoes that, and changes it with Modify with AI against a scripted model, by Replace and Save as copy.
  */
 @RunWith(AndroidJUnit4::class)
 class RecipeDetailTest {
@@ -352,6 +357,64 @@ class RecipeDetailTest {
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("Cheese omelette")).fetchSemanticsNodes().isEmpty() }
         compose.onNodeWithText(context.getString(R.string.library_select_recipe)).assertExists()
     }
+
+    @Test
+    fun eachSectionFoldsOnATapAndStaysFoldedAcrossRestoring() {
+        runBlocking { repository.save(listOf(omelette)) }
+        val viewModel = RecipeDetailViewModel(
+            SavedStateHandle(mapOf(RecipeDetailViewModel.ARG_RECIPE_ID to omelette.id)),
+            repository,
+            UndoDelete(),
+            english,
+            translations,
+            modifier,
+            Clock.systemUTC(),
+        )
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            RecipeCraftTheme {
+                RecipeDetailScreen(onBack = {}, onDeleted = {}, onOpenRecipe = {}, viewModel = viewModel)
+            }
+        }
+        waitForTag(RecipeDetailTestTags.INGREDIENTS)
+        val expanded = context.getString(R.string.cover_section_expanded)
+        val collapsed = context.getString(R.string.cover_section_collapsed)
+        fun section(tag: String) = compose.onNodeWithTag(tag)
+        fun count(tag: String) = compose.onAllNodesWithTag(tag).fetchSemanticsNodes().size
+
+        // Every section starts open.
+        section(RecipeDetailTestTags.INGREDIENTS).assertStateDescription(expanded).assertHasClickAction()
+        assertTrue(count(RecipeDetailTestTags.INGREDIENT) > 0)
+
+        // Folding the long ingredients brings the others into view; then fold them too.
+        section(RecipeDetailTestTags.INGREDIENTS).performClick().assertStateDescription(collapsed)
+        assertEquals(0, count(RecipeDetailTestTags.INGREDIENT))
+        assertEquals(2, count(RecipeDetailTestTags.TOOL))
+        assertEquals(2, count(RecipeDetailTestTags.STEP))
+        section(RecipeDetailTestTags.TOOLS).assertStateDescription(expanded).performClick().assertStateDescription(collapsed)
+        section(RecipeDetailTestTags.STEPS).assertStateDescription(expanded).performClick().assertStateDescription(collapsed)
+        assertEquals(0, count(RecipeDetailTestTags.TOOL))
+        assertEquals(0, count(RecipeDetailTestTags.STEP))
+
+        // A configuration change keeps each section folded.
+        restoration.emulateSavedInstanceStateRestore()
+        waitForTag(RecipeDetailTestTags.STEPS)
+        section(RecipeDetailTestTags.INGREDIENTS).assertStateDescription(collapsed)
+        section(RecipeDetailTestTags.TOOLS).assertStateDescription(collapsed)
+        section(RecipeDetailTestTags.STEPS).assertStateDescription(collapsed)
+        assertEquals(0, count(RecipeDetailTestTags.INGREDIENT) + count(RecipeDetailTestTags.TOOL) + count(RecipeDetailTestTags.STEP))
+
+        // Opening each one shows its content again.
+        section(RecipeDetailTestTags.STEPS).performClick().assertStateDescription(expanded)
+        assertEquals(2, count(RecipeDetailTestTags.STEP))
+        section(RecipeDetailTestTags.TOOLS).performClick().assertStateDescription(expanded)
+        assertEquals(2, count(RecipeDetailTestTags.TOOL))
+        section(RecipeDetailTestTags.INGREDIENTS).performClick().assertStateDescription(expanded)
+        compose.onNodeWithText("3 Eggs").assertIsDisplayed()
+    }
+
+    private fun SemanticsNodeInteraction.assertStateDescription(value: String) =
+        assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, value))
 
     @Test
     fun anUnknownIdSaysTheRecipeIsGone() {

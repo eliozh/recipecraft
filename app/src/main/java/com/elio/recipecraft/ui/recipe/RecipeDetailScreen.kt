@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -80,7 +81,8 @@ import kotlinx.coroutines.launch
  * action. After a delete it calls [onDeleted]; the library then offers Undo. A recipe in another
  * language than the app's offers Translate, which updates it in place. Modify with AI shows the
  * model's version next to the saved one; Replace updates the recipe in place, and Save as copy adds
- * a new recipe that [onOpenRecipe] can open. Cook opens [onCook], one step at a time.
+ * a new recipe that [onOpenRecipe] can open. Cook opens [onCook], one step at a time. The
+ * ingredients, tools and steps each fold away on a tap of their heading.
  *
  * On the cover screen it keeps the essentials: the name, the calories and a big Cook button, with
  * the ingredients, tools and steps folded into sections that open on a tap.
@@ -260,6 +262,10 @@ private fun RecipeDetailContent(
     onCook: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    // Open at first, unlike the cover screen, where space is short.
+    var ingredientsOpen by rememberSaveable { mutableStateOf(true) }
+    var toolsOpen by rememberSaveable { mutableStateOf(true) }
+    var stepsOpen by rememberSaveable { mutableStateOf(true) }
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         LazyColumn(
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
@@ -267,19 +273,22 @@ private fun RecipeDetailContent(
             modifier = Modifier.widthIn(max = 640.dp).fillMaxSize().testTag(RecipeDetailTestTags.SCREEN),
         ) {
             item { Header(recipe, canModify, onModify, onCook) }
-            sectionTitle(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS)
-            itemsIndexed(recipe.ingredients) { index, ingredient ->
-                IngredientRow(ingredient, ingredientKcal.getOrNull(index))
-            }
-            if (recipe.tools.isNotEmpty()) {
-                sectionTitle(R.string.recipe_tools, RecipeDetailTestTags.TOOLS)
-                itemsIndexed(recipe.tools) { _, tool ->
-                    Text("• $tool", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(RecipeDetailTestTags.TOOL))
+            collapsibleSection(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS, ingredientsOpen, { ingredientsOpen = it }, SECTION_TOP) {
+                itemsIndexed(recipe.ingredients) { index, ingredient ->
+                    IngredientRow(ingredient, ingredientKcal.getOrNull(index))
                 }
             }
-            sectionTitle(R.string.recipe_steps, RecipeDetailTestTags.STEPS)
-            itemsIndexed(recipe.steps) { _, step ->
-                Box(Modifier.testTag(RecipeDetailTestTags.STEP)) { StepRow(step) }
+            if (recipe.tools.isNotEmpty()) {
+                collapsibleSection(R.string.recipe_tools, RecipeDetailTestTags.TOOLS, toolsOpen, { toolsOpen = it }, SECTION_TOP) {
+                    itemsIndexed(recipe.tools) { _, tool ->
+                        Text("• $tool", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(RecipeDetailTestTags.TOOL))
+                    }
+                }
+            }
+            collapsibleSection(R.string.recipe_steps, RecipeDetailTestTags.STEPS, stepsOpen, { stepsOpen = it }, SECTION_TOP) {
+                itemsIndexed(recipe.steps) { _, step ->
+                    Box(Modifier.testTag(RecipeDetailTestTags.STEP)) { StepRow(step) }
+                }
             }
         }
     }
@@ -381,17 +390,17 @@ internal fun CoverRecipeDetailContent(
                 }
             }
         }
-        coverSection(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS, ingredientsOpen, { ingredientsOpen = it }) {
+        collapsibleSection(R.string.recipe_ingredients, RecipeDetailTestTags.INGREDIENTS, ingredientsOpen, { ingredientsOpen = it }) {
             itemsIndexed(recipe.ingredients) { index, ingredient -> IngredientRow(ingredient, ingredientKcal.getOrNull(index)) }
         }
         if (recipe.tools.isNotEmpty()) {
-            coverSection(R.string.recipe_tools, RecipeDetailTestTags.TOOLS, toolsOpen, { toolsOpen = it }) {
+            collapsibleSection(R.string.recipe_tools, RecipeDetailTestTags.TOOLS, toolsOpen, { toolsOpen = it }) {
                 itemsIndexed(recipe.tools) { _, tool ->
                     Text("• $tool", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.testTag(RecipeDetailTestTags.TOOL))
                 }
             }
         }
-        coverSection(R.string.recipe_steps, RecipeDetailTestTags.STEPS, stepsOpen, { stepsOpen = it }) {
+        collapsibleSection(R.string.recipe_steps, RecipeDetailTestTags.STEPS, stepsOpen, { stepsOpen = it }) {
             itemsIndexed(recipe.steps) { _, step -> Box(Modifier.testTag(RecipeDetailTestTags.STEP)) { StepRow(step) } }
         }
         item {
@@ -414,30 +423,25 @@ internal fun CoverRecipeDetailContent(
     }
 }
 
-private fun LazyListScope.coverSection(
+/** A section [title] that folds its [content] away on a tap; [topPadding] sits above the header, outside its touch area. */
+private fun LazyListScope.collapsibleSection(
     title: Int,
     tag: String,
     expanded: Boolean,
     onExpandedChanged: (Boolean) -> Unit,
+    topPadding: Dp = 0.dp,
     content: LazyListScope.() -> Unit,
 ) {
     item(contentType = "section") {
-        CoverSectionHeader(stringResource(title), expanded, onExpandedChanged, Modifier.testTag(tag))
+        CoverSectionHeader(stringResource(title), expanded, onExpandedChanged, Modifier.padding(top = topPadding).testTag(tag))
     }
     if (expanded) content()
 }
 
 private val COVER_COOK_HEIGHT = 56.dp
 
-private fun LazyListScope.sectionTitle(title: Int, tag: String) {
-    item(contentType = "section") {
-        Text(
-            stringResource(title),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 12.dp).semantics { heading() }.testTag(tag),
-        )
-    }
-}
+/** The space above each section header on the regular detail screen. */
+private val SECTION_TOP = 4.dp
 
 /** The ingredient line, then its weight and calories: the table figure when it matched, else the model's estimate. */
 @Composable
