@@ -29,11 +29,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.elio.recipecraft.R
 import com.elio.recipecraft.domain.GenerationRequest
@@ -147,16 +149,22 @@ private fun CountStepper(state: ComposerState, onCountChanged: (Int) -> Unit) {
         ) {
             Icon(painterResource(R.drawable.ic_remove), stringResource(R.string.composer_count_decrease))
         }
+        // The number alone on screen; TalkBack hears it with its unit ("2 sets").
+        val spoken = pluralStringResource(
+            if (state.scope == GenerationScope.FULL_DAY_SET) R.plurals.composer_count_sets else R.plurals.composer_count_recipes,
+            state.count,
+            state.count,
+        )
         Text(
-            pluralStringResource(
-                if (state.scope == GenerationScope.FULL_DAY_SET) R.plurals.composer_count_sets else R.plurals.composer_count_recipes,
-                state.count,
-                state.count,
-            ),
+            state.count.toString(),
             style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
             modifier = Modifier
-                .widthIn(min = 72.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite }
+                .widthIn(min = 48.dp)
+                .semantics {
+                    contentDescription = spoken
+                    liveRegion = LiveRegionMode.Polite
+                }
                 .testTag(ComposerTestTags.COUNT),
         )
         OutlinedIconButton(

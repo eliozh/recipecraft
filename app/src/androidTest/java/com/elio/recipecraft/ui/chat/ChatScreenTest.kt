@@ -195,7 +195,7 @@ class ChatScreenTest {
         setContent()
         compose.onNodeWithText(context.getString(R.string.composer_scope_full_day)).performClick()
         compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick()
-        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("2 sets")
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("2").assertContentDescriptionEquals("2 sets")
         compose.onNodeWithTag(ComposerTestTags.PREFERENCES).performTextInput("vegetarian")
         compose.onNodeWithTag(ComposerTestTags.GENERATE).performClick()
 
@@ -219,7 +219,7 @@ class ChatScreenTest {
         setContent()
         compose.onNodeWithText(context.getString(R.string.meal_dinner)).performClick()
         repeat(3) { compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick() }
-        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("4 recipes")
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("4").assertContentDescriptionEquals("4 recipes")
         compose.onNodeWithTag(ComposerTestTags.GENERATE).performClick()
 
         waitForText("Dinner × 4")
@@ -236,7 +236,7 @@ class ChatScreenTest {
         setContent()
         compose.onNodeWithTag(ComposerTestTags.DECREASE).assertIsNotEnabled()
         repeat(12) { compose.onNodeWithTag(ComposerTestTags.INCREASE).performClick() }
-        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("10 sets")
+        compose.onNodeWithTag(ComposerTestTags.COUNT).assertTextEquals("10").assertContentDescriptionEquals("10 sets")
         compose.onNodeWithTag(ComposerTestTags.INCREASE).assertIsNotEnabled()
 
         compose.onNodeWithTag(ComposerTestTags.TOGGLE).performClick()
