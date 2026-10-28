@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🍲 RecipeCraft
+<img src="docs/images/logo.svg" width="120" alt="RecipeCraft logo">
+
+# RecipeCraft
 
 **Chat your way to dinner.** 🥢 RecipeCraft is an Android app that turns a conversation with the LLM
 you choose into structured recipes. Each one comes with ingredients, kitchen tools, numbered steps

@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🍲 RecipeCraft
+<img src="docs/images/logo.svg" width="120" alt="RecipeCraft logo">
+
+# RecipeCraft
 
 **聊着天，就把晚饭定了。** 🥢 RecipeCraft 是一款 Android 应用：和你自己选的大模型聊几句，就能得到结构清晰的食谱，
 食材、厨具、分步做法一应俱全，热量也有据可查。
